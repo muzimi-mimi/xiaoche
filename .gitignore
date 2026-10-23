@@ -8,3 +8,10 @@ _sp_trace.txt
 Thumbs.db
 desktop.ini
 ~$*
+
+# Keil 编译中间产物(保留 hex/map/构建日志)
+keil_PID/MDK-ARM/PID/*
+!keil_PID/MDK-ARM/PID/PID.hex
+!keil_PID/MDK-ARM/PID/PID.map
+!keil_PID/MDK-ARM/PID/PID.build_log.htm
+keil_PID/MDK-ARM/*.uvguix.*
