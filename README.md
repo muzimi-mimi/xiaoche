@@ -12,6 +12,7 @@
 ### 活跃/进行中
 | 目录 | 内容 |
 |---|---|
+| `keil_PID/` | **Keil 工程本体**(2026-10-24 从 `D:\Users\huang\Desktop\keil\PID` 迁入)。用 `MDK-ARM/PID.uvprojx` 打开;编译中间产物已忽略,保留 PID.hex/PID.map |
 | `gmr_tmp/` | 赛道数据分析 + PPT 制作(build.js / build_ppt.js / base.pptx),10-22~10-23 主线 |
 | `work/` | 最新 main_utf8.c 快照与快速图片输出 |
 
@@ -49,5 +50,5 @@
 - `*.msi`、`_probe*.bin`、`_sp_trace.txt`
 
 ## 备注
-- 仓库身份为本地占位(`huang <huang@local>`),如需正式身份请改 `git config`。
-- 外部 Keil 工程(`D:\Users\huang\Desktop\keil`)尚未纳入版本控制,仍靠手工 `bak_*`。
+- 仓库身份:h <114514@163.com>(global + local)。
+- Keil 工程 2026-10-24 起以 `keil_PID/` 为唯一工作副本,原 Desktop 路径已不存在;改动直接在仓库里做,不再需要手工 bak。
