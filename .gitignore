@@ -15,3 +15,4 @@ keil_PID/MDK-ARM/PID/*
 !keil_PID/MDK-ARM/PID/PID.map
 !keil_PID/MDK-ARM/PID/PID.build_log.htm
 keil_PID/MDK-ARM/*.uvguix.*
+.zcode/
