@@ -1,0 +1,78 @@
+- insert:
+    - id: file-changes
+      name: '@deepseek-ai/dsh-file-changes'
+
+- id: plugin-package-inventory-deepseek
+  name: '@deepseek-ai/dsh-plugin-package-inventory-deepseek'
+  config:
+    enabled: false
+- insert:
+    - id: client-file-changes
+      name: '@deepseek-ai/dsh-client-file-changes'
+- insert:
+    - id: unified-market
+      name: 'dsh-unified-market'
+- insert:
+    - id: easy-setup
+      name: '@deepseek-ai/dsh-easy-setup'
+- insert:
+    - id: eac-locale-compat
+      name: 'dsh-eac-locale-compat'
+- insert:
+    - id: viewport-lock
+      name: 'dsh-viewport-lock'
+- insert:
+    - id: compact
+      name: 'dsh-compact'
+- insert:
+    - id: plugin-shield
+      name: 'dsh-plugin-shield'
+- insert:
+    - id: settings-scroll-fix
+      name: 'dsh-settings-scroll-fix'
+- id: agent-default-model
+  name: "@deepseek-ai/dsh-agent-default-model"
+  config:
+    provider: deepseek-official
+    model: deepseek-flash
+    reasoningEffort: max
+- id: ui-settings-account
+  name: "@deepseek-ai/dsh-client-ui-settings-account"
+  config:
+    version: 1
+    step: done
+    purpose: development
+    process: detailed
+    completion: completed
+    usage: detailed
+    developerTools: true
+- id: ui-chat
+  name: "@deepseek-ai/dsh-client-ui-chat"
+  config:
+    transcriptView: detailed
+    performanceUsage: detailed
+- id: ui-settings
+  name: "@deepseek-ai/dsh-client-ui-settings"
+  config:
+    enabled: true
+- id: ui-conversation
+  name: "@deepseek-ai/dsh-client-ui-conversation"
+  config:
+    busyEnter: steer
+
+# 插件管理（设置页「插件」栏）：关闭 dsh-whale-widget
+- id: dsh-whale-widget
+  name: 'dsh-whale-widget'
+  disabled: false
+
+# 插件市场（dsh-unified-market）：关闭 github:adoresever/graph-memory
+- id: github:adoresever/graph-memory
+  name: 'github:adoresever/graph-memory'
+  disabled: true
+
+# 插件管理（设置页「插件」栏）：关闭 graph-memory
+- id: graph-memory
+  name: 'graph-memory'
+  disabled: true
+- id: graph-memory
+  disabled: false

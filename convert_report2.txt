@@ -1,0 +1,13 @@
+table1 (corrupt-3F): 42 lines ; table2 (U+FFFD): 6 lines
+Core\Inc\OLED.h              lines=63    conv=13   rep3F=0    repFFFD=0   gbkPassthru=0    2555 -> 2464 bytes
+Core\Inc\OLED_Data.h         lines=42    conv=15   rep3F=0    repFFFD=0   gbkPassthru=0    1066 -> 938 bytes
+Core\Inc\OLED_Font.h         lines=293   conv=1    rep3F=0    repFFFD=0   gbkPassthru=0    9173 -> 9162 bytes
+Core\Inc\pid.h               lines=30    conv=16   rep3F=0    repFFFD=0   gbkPassthru=0    772 -> 666 bytes
+Core\Src\main.c              lines=699   conv=98   rep3F=42   repFFFD=6   gbkPassthru=73   26788 -> 25777 bytes
+Core\Src\MPU6050.c           lines=124   conv=25   rep3F=0    repFFFD=0   gbkPassthru=0    4021 -> 3737 bytes
+Core\Src\pid.c               lines=65    conv=33   rep3F=0    repFFFD=0   gbkPassthru=0    2487 -> 2060 bytes
+Core\Src\TB6612.c            lines=62    conv=6    rep3F=0    repFFFD=0   gbkPassthru=0    2013 -> 1971 bytes
+Core\Src\OLED.c              lines=1472  conv=601  rep3F=0    repFFFD=0   gbkPassthru=0    52615 -> 44653 bytes
+Core\Src\OLED_Data.c         lines=390   conv=19   rep3F=0    repFFFD=0   gbkPassthru=0    16168 -> 15919 bytes
+
+TOTALS: converted=827 rep3F=42 repFFFD=6 gbkPassthru=73 unrepresentable=0

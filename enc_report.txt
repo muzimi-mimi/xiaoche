@@ -1,0 +1,431 @@
+================================================================
+FILE : Core\Inc\OLED.h
+SIZE : 2555 bytes, 63 lines
+SPLIT: ascii=50  utf8=13  gbk=0  UNDECODABLE=0
+CLASS: pure UTF-8  -> simple whole-file convert
+
+
+================================================================
+FILE : Core\Inc\OLED_Data.h
+SIZE : 1066 bytes, 42 lines
+SPLIT: ascii=27  utf8=15  gbk=0  UNDECODABLE=0
+CLASS: pure UTF-8  -> simple whole-file convert
+
+
+================================================================
+FILE : Core\Inc\OLED_Font.h
+SIZE : 9173 bytes, 293 lines
+SPLIT: ascii=292  utf8=1  gbk=0  UNDECODABLE=0
+CLASS: pure UTF-8  -> simple whole-file convert
+
+
+================================================================
+FILE : Core\Inc\PID.h
+SIZE : 772 bytes, 30 lines
+SPLIT: ascii=14  utf8=16  gbk=0  UNDECODABLE=0
+CLASS: pure UTF-8  -> simple whole-file convert
+
+
+================================================================
+FILE : Core\Src\main.c
+SIZE : 26788 bytes, 699 lines
+SPLIT: ascii=528  utf8=56  gbk=115  UNDECODABLE=0
+CLASS: MIXED       -> per-line convert (UTF-8 lines only)
+
+---- UTF-8 lines (56) ----
+  84| static uint8_t ReviveCount = 0;   // 自动复活计数
+  91| //static uint8_t RxState = 0;                 // 状�?�机状�??
+ 102| int16_t LeftPWM, RightPWM;			//左PWM，右PWM
+ 103| int16_t AvePWM, DifPWM;				//平均PWM，差分PWM
+ 116| #define ERECT_PERIOD_MS  500		/* 脉冲周期 ms */
+ 130| .OutMax = 80,					//输出限幅的最大�??
+ 131| .OutMin = -80,					//输出限幅的最小�??
+ 133| .OutOffset = 0,					//输出偏移
+ 239| /* 互补滤波 */
+ 334| Count1 ++;				//计次自增
+ 353| /*执行PID调控程序*/
+ 356| /*速度环PID控制*/
+ 361| /*转向环PID控制*/
+ 366| if (DifPWM > 50) DifPWM = 50; else if (DifPWM < -50) DifPWM = -50;	/* 限幅±25/轮，避免前馈+反馈叠加过大 */
+ 386| TimerErrorFlag = 1;  // 标记错误
+ 440| for (k = 0; k < 30; k++)			/* 30 × 10ms = 300ms */
+ 493| OLED_Printf(0, 8, OLED_6X8, "KP:%05.2f//%05.2f//%05.2f ", AnglePID.Kp, SpeedPID.Kp, TurnPID.Kp);		//角度环Kp
+ 494| OLED_Printf(0, 16, OLED_6X8, "KI:%05.2f//%05.2f//%05.2f", AnglePID.Ki, SpeedPID.Ki, TurnPID.Ki);		//角度环Ki
+ 495| OLED_Printf(0, 24, OLED_6X8, "KD:%05.2f//%05.2f//%05.2f", AnglePID.Kd, SpeedPID.Kd, TurnPID.Kd);		//角度环Kd
+ 496| OLED_Printf(0, 32, OLED_6X8, "T:%+05.1f", AnglePID.Target);	//角度环目标�??
+ 497| OLED_Printf(0, 40, OLED_6X8, "Angle:%+05.1f", Angle);			//角度环实际�??
+ 498| OLED_Printf(0, 48, OLED_6X8, "O:%+05.0f", AnglePID.Out);	//角度环输出�??
+ 499| OLED_Printf(0, 56, OLED_6X8, "GX:%+05d", GX);				//显示GY，便于校准陀螺仪零漂
+ 521| char *Tag = strtok(BlueSerial_RxPacket[i], ",");	//提取数据1，定义为标签Tag
+ 535| char *Name = strtok(NULL, ",");			//提取数据2，定义为按键名称
+ 536| char *Action = strtok(NULL, ",");		//提取数据3，定义为按键动作
+ 540| else if (strcmp(Tag, "slider") == 0)	//Tag为slider/alider，收到滑杆数据包
+ 542| char *Name = strtok(NULL, ",");			//提取数据2，定义为滑杆名称
+ 545| /*执行滑杆操作*/
+ 546| if (strcmp(Name, "AngleKp") == 0)	//如果滑杆名称是AngleKp
+ 548| AnglePID.Kp = atof(Value);		//则把滑杆值赋值给角度环Kp
+ 550| else if (strcmp(Name, "AngleKi") == 0)	//如果滑杆名称是AngleKi
+ 552| AnglePID.Ki = atof(Value);		//则把滑杆值赋值给角度环Ki
+ 554| else if (strcmp(Name, "AngleKd") == 0)	//如果滑杆名称是AngleKd
+ 556| AnglePID.Kd = atof(Value);		//则把滑杆值赋值给角度环Kd
+ 558| else if (strcmp(Name, "G") == 0)	//如果滑杆名称是AngleKd
+ 560| G = atof(Value);		//则把滑杆值赋值给角度环Kd
+ 562| else if (strcmp(Name, "SpeedKp") == 0)		//如果滑杆名称是SpeedKp
+ 564| SpeedPID.Kp = atof(Value);				//则把滑杆值赋值给速度环Kp
+ 566| else if (strcmp(Name, "SpeedKi") == 0)		//如果滑杆名称是SpeedKi
+ 568| SpeedPID.Ki = atof(Value);				//则把滑杆值赋值给速度环Ki
+ 570| else if (strcmp(Name, "SpeedKd") == 0)		//如果滑杆名称是SpeedKd
+ 572| SpeedPID.Kd = atof(Value);				//则把滑杆值赋值给速度环Kd
+ 574| else if (strcmp(Name, "TurnKp") == 0)		//如果滑杆名称是TurnKp
+ 576| TurnPID.Kp = atof(Value);				//则把滑杆值赋值给转向环Kp
+ 578| else if (strcmp(Name, "TurnKi") == 0)		//如果滑杆名称是TurnKi
+ 580| TurnPID.Ki = atof(Value);				//则把滑杆值赋值给转向环Ki
+ 582| else if (strcmp(Name, "TurnKd") == 0)		//如果滑杆名称是TurnKd
+ 584| TurnPID.Kd = atof(Value);				//则把滑杆值赋值给转向环Kd
+ 588| else if (strcmp(Tag, "joystick") == 0)		//Tag为joystick，收到摇杆数据包
+ 590| int8_t LH = atoi(strtok(NULL, ","));		//提取数据2，定义为摇杆值LH
+ 591| int8_t LV = atoi(strtok(NULL, ","));		//提取数据3，定义为摇杆值LV
+ 592| int8_t RH = atoi(strtok(NULL, ","));		//提取数据4，定义为摇杆值RH
+ 593| int8_t RV = atoi(strtok(NULL, ","));		//提取数据5，定义为摇杆值RV
+ 595| /*执行摇杆操作*/
+ 604| SpeedPID.Target = 0.20f;		/* 前进蠕动量，0.15~0.4 可调 */
+
+---- GBK lines (115) ----
+  73| /* ===== 车辆状态机（取代原来的 runflag）=====
+  74| * 上电默认 ST_IDLE：电机断电、什么都不做，等蓝牙发 "1"。
+  75| * 收到 "1" -> ST_ERECT  ：自起立，最长 ERECT_TIMEOUT_MS(3s)。
+  76| * 角度进入 ERECT_DONE_ANG 窗口 -> ST_BALANCE：正常直立。
+  77| * 超时 / 平衡中倒出 ERECT_START_ANG -> 回 ST_IDLE，等下一次 "1"。
+  78| * 三态互斥：只有 ST_BALANCE 里才跑平衡环。 */
+  89| //char BlueSerial_RxPacket[RX_BUF_SIZE];   // 鎺ユ敹缂撳啿锟??
+  90| //volatile uint8_t BlueSerial_RxFlag = 0;     // 甯у畬鎴愭爣锟??
+  92| //static uint16_t pRxPacket = 0;              // 褰撳墠缂撳啿鍖虹储锟??
+ 104| int16_t DifPWMTarget = 0;			//杞悜鐜緭鍑虹洰鏍囧??
+ 105| float DifSpeedFilter = 0.0f;		//杞悜閫熷害婊ゆ尝鍊?
+ 106| #define TURN_FF  20.0f						/* 杞悜宸?熷墠棣堬細璺ㄨ秺鐢垫満/闈欐懇鎿︽鍖猴紝鍏堟妸杞瓙鎺ㄦ椿(15~30鍙皟) */
+ 107| /* ---------- 鑷捣绔?(Self-Erect)鍙傛暟 ---------- */
+ 108| #define ERECT_PWM        100		/* 鐢╄疆PWM(0~100)锛氳捣涓嶆潵鎵惧ぇ锛涘お鐚涗細鐢╄繃澶淬?佺數鏈哄彂鐑? */
+ 109| #define ERECT_START_ANG  55.0f	/* 骞宠　涓?捐瓒呰繃姝ゅ?? 鈫? 鍒ゅ畾鎽斿?掞紝杩涘叆鑷捣绔? */
+ 110| #define ERECT_DONE_ANG   30.0f	/* 鐢╁洖鍒版瑙掑害浠ュ唴 鈫? 浜ゅ洖骞宠　鐜? */
+ 111| #define ERECT_DONE_ANG_BACK 45.0f	/* 鍚庡?炬柟鍚戯細鍚庝晶鏇撮毦鎶紝鍒拌繖涓搴﹀氨浜ゅ洖骞宠　鐜帴鐫?鎶? */
+ 112| #define ERECT_TIMEOUT_MS 3000	/* 杩炵画鐢╄秴杩囪繖涓椂闂磋繕娌¤捣鏉? 鈫? 鍋滄満淇濇姢(杞瓙绂诲湴/琚崱浣?) */
+ 113| uint16_t ErectTime = 0;			/* 鑷捣绔嬭鏃?(ms) */
+ 114| #define ERECT_DIR        (1)		/* 鐢╄疆鏂瑰悜锛?1=涓庡钩琛＄幆鍚屽悜(榛樿)锛?-1=鍙嶅悜(鍘熷湴杞湀/纾ㄥ湴璧蜂笉鏉ユ椂璇? -1) */
+ 115| #define ERECT_PULSE_MS   150			/* 鑴夊啿(韪?)妯″紡锛氭瘡鍛ㄦ湡鍙?氱數杩欎箞闀?(濡?150~200)锛?0=鎸佺画椤? */
+ 117| static uint16_t Count2 = 0;			//杞悜鐜?10ms璁℃暟
+ 118| float LeftSpeed, RightSpeed;		//宸﹂?熷害锛屽彸閫熷害
+ 119| float AveSpeed, DifSpeed;			//骞冲潎閫熷害锛屽樊鍒嗛?熷害
+ 123| /*瀹氫箟PID缁撴瀯浣撳彉锟??*/
+ 124| PID_t AnglePID =  					//瑙掑害鐜疨ID缁撴瀯浣撳彉閲忥紝瀹氫箟鐨勬椂鍊欏悓鏃剁粰閮ㄥ垎鎴愬憳璧嬪垵锟??
+ 126| .Kp = 16.9,						//姣斾緥椤规潈锟??
+ 127| .Ki = 0.06,						//绉垎椤规潈锟??
+ 128| .Kd = 30.4,						//寰垎椤规潈锟??
+ 135| .ErrorIntMax = 600,				//璇樊绉垎鐨勬渶澶у??
+ 136| .ErrorIntMin = -600,			//璇樊绉垎鐨勬渶灏忓??
+ 139| PID_t SpeedPID =  					//瑙掑害鐜疨ID缁撴瀯浣撳彉閲忥紝瀹氫箟鐨勬椂鍊欏悓鏃剁粰閮ㄥ垎鎴愬憳璧嬪垵鍊?
+ 141| .Kp = 2.7,						//姣斾緥椤规潈閲?
+ 142| .Ki = 0.21,						//绉垎椤规潈閲?
+ 143| .Kd = 0,						//寰垎椤规潈閲?
+ 145| .OutMax = 10,					//杈撳嚭闄愬箙鐨勬渶澶у??
+ 146| .OutMin = -10,					//杈撳嚭闄愬箙鐨勬渶灏忓??
+ 148| .ErrorIntMax = 150,				//璇樊绉垎鐨勬渶澶у??
+ 149| .ErrorIntMin = -150,			//璇樊绉垎鐨勬渶灏忓??
+ 152| PID_t TurnPID =  					//杞悜鐜疨ID缁撴瀯浣撳彉閲忥紝瀹氫箟鐨勬椂鍊欏悓鏃剁粰閮ㄥ垎鎴愬憳璧嬪垵鍊?
+ 154| .Kp = 5.9,						//姣斾緥椤规潈閲?
+ 155| .Ki = 0,						//绉垎椤规潈閲?
+ 156| .Kd = 0,						//寰垎椤规潈閲?
+ 158| .OutMax = 30,					//杈撳嚭闄愬箙鐨勬渶澶у??
+ 159| .OutMin = -30,					//杈撳嚭闄愬箙鐨勬渶灏忓??
+ 161| .ErrorIntMax = 20,				//璇樊绉垎鐨勬渶澶у??
+ 162| .ErrorIntMin = -20,				//璇樊绉垎鐨勬渶灏忓??
+ 167| * 状态机动作：StartErect() / StopCar()
+ 168| * StartErect() 只在主循环（蓝牙解析处）调用；StopCar() 主循环和 10ms 中断
+ 169| * 都会调用，它只做赋值和 GPIO 写，可以从中断里安全调用。
+ 170| * 写入顺序刻意把 CarState 放在最后：中断只会看到"还没开始"或"参数已就绪"
+ 171| * 两种状态，所以不需要额外的临界区。
+ 178| TB6612_setPWM(1, 0);          /* 停：PWM=0，IN1/IN2 同向 -> 电机滑行 */
+ 186| return;                   /* 起立中或已直立：忽略重复的 "1" */
+ 189| /* 先把 PID 全部清干净再交给自起立，避免上一轮的积分残留 */
+ 194| /* 预置"上次值"，防止微分项第一次冲击 */
+ 209| CarState = ST_ERECT;          /* 最后一步：从中断视角看是原子的 */
+ 233| /* 闄?铻轰华Y杞撮浂婕傦紝鎸夊疄闄呯‖浠惰皟鏁? */
+ 236| /* 鍔犻?熷害璁¤绠楀緱鍒扮殑瑙掑害 */
+ 244| /* ================= 控制分派：三态互斥 ================= */
+ 247| /* ---------- 正常直立：原平衡环 ---------- */
+ 265| /* ---------- 自起立：两轮同向给大 PWM，靠反扭矩把车身甩回竖直 ----------
+ 266| * 方向与平衡环一致：Angle>0 往前甩，Angle<0 往后甩。
+ 267| * 后仰比前倾更难甩起来，所以成功窗口按方向分别判定。 */
+ 272| /* 已进入可平衡范围 -> 交回平衡环 */
+ 295| if (ERECT_DIR < 0) swing = -swing;      /* 方向不对就取反 */
+ 298| swing = 0;                          /* 脉冲(踢)模式：到点断电，靠惯性甩上去 */
+ 300| /* 防自转：起立过程不响应摇杆，只把左右轮速差拉回 0 */
+ 316| ErectTime += 10;                        /* 本段每 10ms 进一次 */
+ 320| /* ---------- 超时仍起不来（轮子离地/打滑/被卡住）：停机 ----------
+ 321| * 退回 IDLE，再发一次 "1" 即可重试。 */
+ 327| /* ---------- ST_IDLE：上电默认，电机断电 ----------
+ 328| * 每 10ms 反复置 0，是自愈式的：任何意外的残留 PWM 都会被清掉。 */
+ 336| if (Count1 >= 50)		//濡傛灉璁℃50娆★紝鍒檌f鎴愮珛锛屽嵆if姣忛殧50ms杩涗竴娆?
+ 338| Count1 = 0;			//璁℃娓呴浂锛屼究浜庝笅娆¤娆?
+ 340| /*鑾峰彇缂栫爜鍣ㄧ殑璁℃鍊煎閲忥紝骞惰绠楃數鏈烘棆杞?熷害*/
+ 341| /*Encoder_Get鍑芥暟锛屽彲浠ヨ幏鍙栦袱娆¤鍙栫紪鐮佸櫒鐨勮娆″?煎閲?*/
+ 342| /*缂栫爜鍣ㄧ閾佹棆杞竴鍦堬紝璁℃澧為噺涓?44锛岀紪鐮佸櫒璇诲彇闂撮殧鏄?50ms锛?0.05s锛?*/
+ 343| /*鍥犳纾侀搧鏃嬭浆閫熷害 = 璁℃澧為噺 / 44 / 0.05锛屽崟浣嶆槸杞瘡绉?*/
+ 344| /*骞宠　杞︿娇鐢ㄧ殑鐢垫満甯︽湁鍑忛?熺锛屽噺閫熸瘮涓?30*/
+ 345| /*鍥犳鐢垫満杈撳嚭杞存棆杞?熷害 = 纾侀搧鏃嬭浆閫熷害 / 30锛屽崟浣嶆槸杞瘡绉?*/
+ 349| /*淇″彿閲忚浆鎹?*/
+ 350| AveSpeed = (LeftSpeed + RightSpeed) / 2.0;	//鐢卞乏杞?熷害鍜屽彸杞?熷害璁＄畻寰楀埌骞冲潎閫熷害
+ 351| DifSpeed = LeftSpeed - RightSpeed;			//鐢卞乏杞?熷害鍜屽彸杞?熷害璁＄畻寰楀埌宸垎閫熷害
+ 354| if (CarState == ST_BALANCE)		/* 只有正常直立时才跑速度环+转向环 */
+ 357| SpeedPID.Actual = AveSpeed;			//閫熷害鐜疄闄呭?间负AveSpeed
+ 358| PID_Update(&SpeedPID);				//璋冪敤灏佽濂界殑鍑芥暟锛屼竴姝ュ畬鎴怭ID璁＄畻鍜屾洿鏂?
+ 359| AnglePID.Target = SpeedPID.Out;		//閫熷害鐜殑杈撳嚭鍊肩粰鍒拌搴︾幆鐨勭洰鏍囧?硷紝鏋勬垚涓茬骇PID
+ 362| DifSpeedFilter += 0.5f * (DifSpeed - DifSpeedFilter);	/* 杞悜閫熷害涓?闃朵綆閫氾細鎶戝埗缂栫爜鍣ㄥ櫔澹?/鎶栧姩锛岀郴鏁? 0.5 鍙皟(0.3鏇村钩婊?/0.7鏇磋窡鎵?) */
+ 363| TurnPID.Actual = DifSpeedFilter;			//杞悜鐜疄闄呭?间负DifSpeed
+ 364| PID_Update(&TurnPID);				//璋冪敤灏佽濂界殑鍑芥暟锛屼竴姝ュ畬鎴怭ID璁＄畻鍜屾洿鏂?
+ 365| DifPWM = (int16_t)(TurnPID.Out + TURN_FF * TurnPID.Target);	/* 杞悜鐜緭鍑? + 姝诲尯鍓嶉 */
+ 373| /* 平衡中倒出 ERECT_START_ANG -> 停机，回 IDLE 等下一次蓝牙 "1" */
+ 432| HAL_Delay(200);   // 绛夊緟 OLED 涓婄數绋冲畾锛岄伩鍏嶅喎鍚姩涓嶆樉绀?
+ 437| /* 涓婄數鐢ㄥ姞閫熷害璁℃妸鍊捐瀵瑰噯(闈欐鏃跺彲淇?)锛氬惁鍒欓檧铻虹Н鍒嗚鍗佸嚑绉掓墠鏀舵暃锛岃汉鍊掍笂鐢典細璇垽 */
+ 451| BlueSerial_Init();   // 鍒濆鍖栬摑鐗欎覆鍙ｆ帴鏀?
+ 462| CarState = ST_IDLE;          /* 上电默认：电机断电，等蓝牙发 "1" 才自起立 */
+ 464| // 棰勭疆瑙掑害鐜宸紝閬垮厤寰垎椤瑰啿鍑?
+ 466| AnglePID.Actual1 = Angle;   //鍚屾牱棰勭疆涓婃瀹為檯鍊硷紝闃叉寰垎椤圭涓?娆″啿鍑?
+ 480| /* 状态指示灯（PC13 低电平点亮）：
+ 481| *   熄灭 = IDLE 待机    闪烁 = ERECT 自起立中    常亮 = BALANCE 正常直立 */
+ 492| OLED_Printf(0, 0, OLED_6X8, "ST:%s %d", StateStr(), (int)ErectTime);   /* 状态 + 起立计时(ms) */
+ 506| /* ---- 蓝牙裸字节指令（手机串口助手直接敲，不用方括号）----
+ 507| *   '1' -> 自起立        '0' -> 紧急停机
+ 508| * 与下面 [1] / [0] 数据包两种发法都支持。 */
+ 525| if (strcmp(Tag, "1") == 0)                  /* 收到 [1] -> 自起立 */
+ 529| else if (strcmp(Tag, "0") == 0)             /* 收到 [0] -> 紧急停机 */
+ 533| else if (strcmp(Tag, "key") == 0)           /* Tag 为 key，收到按键数据包 */
+ 538| /*姝ゅ鍙墽琛屾寜閿搷浣滐紝鐩墠绋嬪簭鏆傛椂娌＄敤鍒版寜锟??*/
+ 543| char *Value = strtok(NULL, ",");		//鎻愬彇鏁版嵁3锛屽畾涔変负婊戞潌锟??
+ 596| /* 鎽囨潌姝诲尯锛岄伩鍏嶄腑浣嶆姈鍔? */
+ 600| SpeedPID.Target = LV / 50.0;		//鎽囨潌鍊糒V缂╂斁鍚庯紝鎺у埗閫熷害鐜洰鏍囧?硷紝鍓嶅悗琛岃繘鎺у埗
+ 601| TurnPID.Target   = -RH / 50.0;				//鎽囨潌鍊糝H缂╂斁鍚庯紝鎺у埗杞悜鐜洰鏍囧?硷紝宸﹀彸杞集鎺у埗
+ 602| /* 鍙墦杞悜銆佷笉鎵撳墠杩涙椂锛岃嚜鍔ㄧ粰涓?鐐瑰墠杩涢?熷害锛氬師鍦拌浆瑕佷袱杞弽鎼撳湴闈紝闈欐懇鎿?+妯悜鍒摝鎵煩涓嶅灏变細鍗℃ */
+ 609| BlueSerial_RxFlag[i] = 0;				//澶勭悊瀹屾垚鍚庯紝鏍囧織浣嶇疆0锛屽厑璁告帴鏀朵笅锟??涓暟鎹寘
+
+
+================================================================
+FILE : Core\Src\MPU6050.c
+SIZE : 4021 bytes, 124 lines
+SPLIT: ascii=99  utf8=25  gbk=0  UNDECODABLE=0
+CLASS: pure UTF-8  -> simple whole-file convert
+
+
+================================================================
+FILE : Core\Src\pid.c
+SIZE : 2487 bytes, 65 lines
+SPLIT: ascii=32  utf8=33  gbk=0  UNDECODABLE=0
+CLASS: pure UTF-8  -> simple whole-file convert
+
+
+================================================================
+FILE : Core\Src\TB6612.c
+SIZE : 2013 bytes, 62 lines
+SPLIT: ascii=56  utf8=6  gbk=0  UNDECODABLE=0
+CLASS: pure UTF-8  -> simple whole-file convert
+
+
+================================================================
+FILE : Core\Src\OLED.c
+SIZE : 52615 bytes, 1472 lines
+SPLIT: ascii=871  utf8=601  gbk=0  UNDECODABLE=0
+CLASS: pure UTF-8  -> simple whole-file convert
+
+
+================================================================
+FILE : Core\Src\OLED_Data.c
+SIZE : 16168 bytes, 390 lines
+SPLIT: ascii=371  utf8=19  gbk=0  UNDECODABLE=0
+CLASS: pure UTF-8  -> simple whole-file convert
+
+
+================================================================
+FILE : Core\Src\_bak_oled_20261010\OLED.c
+SIZE : 52929 bytes, 1480 lines
+SPLIT: ascii=879  utf8=601  gbk=0  UNDECODABLE=0
+CLASS: pure UTF-8  -> simple whole-file convert
+
+
+================================================================
+FILE : Core\Src\_bak_oled_20261010\OLED_Data.c
+SIZE : 16114 bytes, 390 lines
+SPLIT: ascii=365  utf8=25  gbk=0  UNDECODABLE=0
+CLASS: pure UTF-8  -> simple whole-file convert
+
+
+================================================================
+FILE : _bak_sm_20261012_230516\Core\Src\main.c
+SIZE : 23948 bytes, 605 lines
+SPLIT: ascii=444  utf8=63  gbk=98  UNDECODABLE=0
+CLASS: MIXED       -> per-line convert (UTF-8 lines only)
+
+---- UTF-8 lines (63) ----
+  75| static uint8_t ReviveCount = 0;   // 自动复活计数
+  82| //static uint8_t RxState = 0;                 // 状�?�机状�??
+  93| int16_t LeftPWM, RightPWM;			//左PWM，右PWM
+  94| int16_t AvePWM, DifPWM;				//平均PWM，差分PWM
+ 107| #define ERECT_PERIOD_MS  500		/* 脉冲周期 ms */
+ 121| .OutMax = 80,					//输出限幅的最大�??
+ 122| .OutMin = -80,					//输出限幅的最小�??
+ 124| .OutOffset = 0,					//输出偏移
+ 177| /* 互补滤波 */
+ 184| /*角度环PID控制*/
+ 190| LeftPWM = AvePWM + DifPWM / 2;		//由平均PWM和差分PWM计算得到左轮PWM
+ 191| RightPWM = AvePWM - DifPWM / 2;		//由平均PWM和差分PWM计算得到右轮PWM
+ 193| /*PWM限幅*/
+ 194| /*上式计算后，LeftPWM和RightPWM可能会超出电机允许的PWM范围，此处将PWM值范围限制在-100~100之内*/
+ 213| //            /* 未在平衡(runflag=0)：进入自起立流程 */
+ 259| Count1 ++;				//计次自增
+ 278| /*执行PID调控程序*/
+ 281| /*速度环PID控制*/
+ 286| /*转向环PID控制*/
+ 291| if (DifPWM > 50) DifPWM = 50; else if (DifPWM < -50) DifPWM = -50;	/* 限幅±25/轮，避免前馈+反馈叠加过大 */
+ 312| TimerErrorFlag = 1;  // 标记错误
+ 366| for (k = 0; k < 30; k++)			/* 30 × 10ms = 300ms */
+ 418| OLED_Printf(0, 8, OLED_6X8, "KP:%05.2f//%05.2f//%05.2f ", AnglePID.Kp, SpeedPID.Kp, TurnPID.Kp);		//角度环Kp
+ 419| OLED_Printf(0, 16, OLED_6X8, "KI:%05.2f//%05.2f//%05.2f", AnglePID.Ki, SpeedPID.Ki, TurnPID.Ki);		//角度环Ki
+ 420| OLED_Printf(0, 24, OLED_6X8, "KD:%05.2f//%05.2f//%05.2f", AnglePID.Kd, SpeedPID.Kd, TurnPID.Kd);		//角度环Kd
+ 421| OLED_Printf(0, 32, OLED_6X8, "T:%+05.1f", AnglePID.Target);	//角度环目标�??
+ 422| OLED_Printf(0, 40, OLED_6X8, "Angle:%+05.1f", Angle);			//角度环实际�??
+ 423| OLED_Printf(0, 48, OLED_6X8, "O:%+05.0f", AnglePID.Out);	//角度环输出�??
+ 424| OLED_Printf(0, 56, OLED_6X8, "GX:%+05d", GX);				//显示GY，便于校准陀螺仪零漂
+ 435| char *Tag = strtok(BlueSerial_RxPacket[i], ",");	//提取数据1，定义为标签Tag
+ 439| if (strcmp(Tag, "key") == 0)				//Tag为key，收到按键数据包
+ 441| char *Name = strtok(NULL, ",");			//提取数据2，定义为按键名称
+ 442| char *Action = strtok(NULL, ",");		//提取数据3，定义为按键动作
+ 446| else if (strcmp(Tag, "slider") == 0)	//Tag为slider/alider，收到滑杆数据包
+ 448| char *Name = strtok(NULL, ",");			//提取数据2，定义为滑杆名称
+ 451| /*执行滑杆操作*/
+ 452| if (strcmp(Name, "AngleKp") == 0)	//如果滑杆名称是AngleKp
+ 454| AnglePID.Kp = atof(Value);		//则把滑杆值赋值给角度环Kp
+ 456| else if (strcmp(Name, "AngleKi") == 0)	//如果滑杆名称是AngleKi
+ 458| AnglePID.Ki = atof(Value);		//则把滑杆值赋值给角度环Ki
+ 460| else if (strcmp(Name, "AngleKd") == 0)	//如果滑杆名称是AngleKd
+ 462| AnglePID.Kd = atof(Value);		//则把滑杆值赋值给角度环Kd
+ 464| else if (strcmp(Name, "G") == 0)	//如果滑杆名称是AngleKd
+ 466| G = atof(Value);		//则把滑杆值赋值给角度环Kd
+ 468| else if (strcmp(Name, "SpeedKp") == 0)		//如果滑杆名称是SpeedKp
+ 470| SpeedPID.Kp = atof(Value);				//则把滑杆值赋值给速度环Kp
+ 472| else if (strcmp(Name, "SpeedKi") == 0)		//如果滑杆名称是SpeedKi
+ 474| SpeedPID.Ki = atof(Value);				//则把滑杆值赋值给速度环Ki
+ 476| else if (strcmp(Name, "SpeedKd") == 0)		//如果滑杆名称是SpeedKd
+ 478| SpeedPID.Kd = atof(Value);				//则把滑杆值赋值给速度环Kd
+ 480| else if (strcmp(Name, "TurnKp") == 0)		//如果滑杆名称是TurnKp
+ 482| TurnPID.Kp = atof(Value);				//则把滑杆值赋值给转向环Kp
+ 484| else if (strcmp(Name, "TurnKi") == 0)		//如果滑杆名称是TurnKi
+ 486| TurnPID.Ki = atof(Value);				//则把滑杆值赋值给转向环Ki
+ 488| else if (strcmp(Name, "TurnKd") == 0)		//如果滑杆名称是TurnKd
+ 490| TurnPID.Kd = atof(Value);				//则把滑杆值赋值给转向环Kd
+ 494| else if (strcmp(Tag, "joystick") == 0)		//Tag为joystick，收到摇杆数据包
+ 496| int8_t LH = atoi(strtok(NULL, ","));		//提取数据2，定义为摇杆值LH
+ 497| int8_t LV = atoi(strtok(NULL, ","));		//提取数据3，定义为摇杆值LV
+ 498| int8_t RH = atoi(strtok(NULL, ","));		//提取数据4，定义为摇杆值RH
+ 499| int8_t RV = atoi(strtok(NULL, ","));		//提取数据5，定义为摇杆值RV
+ 501| /*执行摇杆操作*/
+ 510| SpeedPID.Target = 0.20f;		/* 前进蠕动量，0.15~0.4 可调 */
+
+---- GBK lines (98) ----
+  80| //char BlueSerial_RxPacket[RX_BUF_SIZE];   // 鎺ユ敹缂撳啿锟??
+  81| //volatile uint8_t BlueSerial_RxFlag = 0;     // 甯у畬鎴愭爣锟??
+  83| //static uint16_t pRxPacket = 0;              // 褰撳墠缂撳啿鍖虹储锟??
+  95| int16_t DifPWMTarget = 0;			//杞悜鐜緭鍑虹洰鏍囧??
+  96| float DifSpeedFilter = 0.0f;		//杞悜閫熷害婊ゆ尝鍊?
+  97| #define TURN_FF  20.0f						/* 杞悜宸?熷墠棣堬細璺ㄨ秺鐢垫満/闈欐懇鎿︽鍖猴紝鍏堟妸杞瓙鎺ㄦ椿(15~30鍙皟) */
+  98| /* ---------- 鑷捣绔?(Self-Erect)鍙傛暟 ---------- */
+  99| #define ERECT_PWM        100		/* 鐢╄疆PWM(0~100)锛氳捣涓嶆潵鎵惧ぇ锛涘お鐚涗細鐢╄繃澶淬?佺數鏈哄彂鐑? */
+ 100| #define ERECT_START_ANG  55.0f	/* 骞宠　涓?捐瓒呰繃姝ゅ?? 鈫? 鍒ゅ畾鎽斿?掞紝杩涘叆鑷捣绔? */
+ 101| #define ERECT_DONE_ANG   30.0f	/* 鐢╁洖鍒版瑙掑害浠ュ唴 鈫? 浜ゅ洖骞宠　鐜? */
+ 102| #define ERECT_DONE_ANG_BACK 45.0f	/* 鍚庡?炬柟鍚戯細鍚庝晶鏇撮毦鎶紝鍒拌繖涓搴﹀氨浜ゅ洖骞宠　鐜帴鐫?鎶? */
+ 103| #define ERECT_TIMEOUT_MS 2000	/* 杩炵画鐢╄秴杩囪繖涓椂闂磋繕娌¤捣鏉? 鈫? 鍋滄満淇濇姢(杞瓙绂诲湴/琚崱浣?) */
+ 104| uint16_t ErectTime = 0;			/* 鑷捣绔嬭鏃?(ms) */
+ 105| #define ERECT_DIR        (1)		/* 鐢╄疆鏂瑰悜锛?1=涓庡钩琛＄幆鍚屽悜(榛樿)锛?-1=鍙嶅悜(鍘熷湴杞湀/纾ㄥ湴璧蜂笉鏉ユ椂璇? -1) */
+ 106| #define ERECT_PULSE_MS   0			/* 鑴夊啿(韪?)妯″紡锛氭瘡鍛ㄦ湡鍙?氱數杩欎箞闀?(濡?150~200)锛?0=鎸佺画椤? */
+ 108| static uint16_t Count2 = 0;			//杞悜鐜?10ms璁℃暟
+ 109| float LeftSpeed, RightSpeed;		//宸﹂?熷害锛屽彸閫熷害
+ 110| float AveSpeed, DifSpeed;			//骞冲潎閫熷害锛屽樊鍒嗛?熷害
+ 114| /*瀹氫箟PID缁撴瀯浣撳彉锟??*/
+ 115| PID_t AnglePID =  					//瑙掑害鐜疨ID缁撴瀯浣撳彉閲忥紝瀹氫箟鐨勬椂鍊欏悓鏃剁粰閮ㄥ垎鎴愬憳璧嬪垵锟??
+ 117| .Kp = 16.9,						//姣斾緥椤规潈锟??
+ 118| .Ki = 0.06,						//绉垎椤规潈锟??
+ 119| .Kd = 30.4,						//寰垎椤规潈锟??
+ 126| .ErrorIntMax = 600,				//璇樊绉垎鐨勬渶澶у??
+ 127| .ErrorIntMin = -600,			//璇樊绉垎鐨勬渶灏忓??
+ 130| PID_t SpeedPID =  					//瑙掑害鐜疨ID缁撴瀯浣撳彉閲忥紝瀹氫箟鐨勬椂鍊欏悓鏃剁粰閮ㄥ垎鎴愬憳璧嬪垵鍊?
+ 132| .Kp = 2.6,						//姣斾緥椤规潈閲?
+ 133| .Ki = 0.21,						//绉垎椤规潈閲?
+ 134| .Kd = 0,						//寰垎椤规潈閲?
+ 136| .OutMax = 10,					//杈撳嚭闄愬箙鐨勬渶澶у??
+ 137| .OutMin = -10,					//杈撳嚭闄愬箙鐨勬渶灏忓??
+ 139| .ErrorIntMax = 150,				//璇樊绉垎鐨勬渶澶у??
+ 140| .ErrorIntMin = -150,			//璇樊绉垎鐨勬渶灏忓??
+ 143| PID_t TurnPID =  					//杞悜鐜疨ID缁撴瀯浣撳彉閲忥紝瀹氫箟鐨勬椂鍊欏悓鏃剁粰閮ㄥ垎鎴愬憳璧嬪垵鍊?
+ 145| .Kp = 5.9,						//姣斾緥椤规潈閲?
+ 146| .Ki = 0,						//绉垎椤规潈閲?
+ 147| .Kd = 0,						//寰垎椤规潈閲?
+ 149| .OutMax = 30,					//杈撳嚭闄愬箙鐨勬渶澶у??
+ 150| .OutMin = -30,					//杈撳嚭闄愬箙鐨勬渶灏忓??
+ 152| .ErrorIntMax = 20,				//璇樊绉垎鐨勬渶澶у??
+ 153| .ErrorIntMin = -20,				//璇樊绉垎鐨勬渶灏忓??
+ 171| /* 闄?铻轰华Y杞撮浂婕傦紝鎸夊疄闄呯‖浠惰皟鏁? */
+ 174| /* 鍔犻?熷害璁¤绠楀緱鍒扮殑瑙掑害 */
+ 182| if (runflag)					//RunFlag闈?0鏃讹紝鍚姩PID绋嬪簭
+ 185| AnglePID.Actual = Angle;	//瑙掑害鐜疄闄呭?间负Angle
+ 186| PID_Update(&AnglePID);		//璋冪敤灏佽濂界殑鍑芥暟锛屼竴姝ュ畬鎴怭ID璁＄畻鍜屾洿鏂?
+ 187| AvePWM = -AnglePID.Out;		//瑙掑害鐜殑杈撳嚭鍊肩粰鍒扮數鏈哄钩鍧嘝WM锛岀敤浜庢帶鍒跺墠鍚庤杩?
+ 189| /*鎺у埗閲忚浆鎹?*/
+ 204| /*PWM杈撳嚭缁欑數鏈?*/
+ 205| TB6612_setPWM(1, LeftPWM);		//LeftPWM杈撳嚭缁欏乏杞數鏈?
+ 206| TB6612_setPWM(2, RightPWM);		//RightPWM杈撳嚭缁欏彸杞數鏈?
+ 214| //            /* ===== 鑷捣绔? Self-Erect =====
+ 215| //               鎽斿??(runflag=0)鏃讹紝涓よ疆鍚屽悜缁欏ぇPWM锛岄潬鐢垫満鍙嶆壄鐭╂妸杞﹁韩鐢╁洖绔栫洿銆?
+ 216| //               鏂瑰悜涓庡钩琛＄幆涓?鑷达細Angle>0(寰?鍓嶅??)灏卞線鍓嶇敥锛孉ngle<0 寰?鍚庣敥銆? */
+ 221| //                if (ERECT_DIR < 0) swing = -swing;		/* 鏂瑰悜涓?閿彇鍙? */
+ 223| //                    swing = 0;							/* 鑴夊啿(韪?)妯″紡锛氬埌鐐规柇鐢碉紝闈犳儻鎬х敥涓婂幓 */
+ 224| //                /* 闃茶嚜杞細璧风珛杩囩▼涓嶅搷搴旀憞鏉嗭紝鍙妸宸﹀彸杞?熷樊鎷夊洖 0 */
+ 228| //                DifPWM = (int16_t)TurnPID.Out;						/* 璧风珛杩囩▼鍙仛宸?熶慨姝? */
+ 233| //                ErectTime += 10;				/* 鏈姣?10ms杩涗竴娆? */
+ 237| //                /* 宸茬敥杩涘彲骞宠　鑼冨洿 鈫? 浜ゅ洖骞宠　鐜?(PID娓呴浂锛岄伩鍏嶉?熷害鐜Н鍒嗘畫鐣欑獪杞?) */
+ 242| //                AnglePID.Actual1 = Angle;		/* 闃插井鍒嗛」绗竴娆″啿鍑? */
+ 251| //                /* 瓒呮椂浠嶈捣涓嶆潵(杞瓙绂诲湴/鎵撴粦/琚崱浣?)锛氬仠鏈轰繚鎶ょ數鏈? */
+ 261| if (Count1 >= 50)		//濡傛灉璁℃50娆★紝鍒檌f鎴愮珛锛屽嵆if姣忛殧50ms杩涗竴娆?
+ 263| Count1 = 0;			//璁℃娓呴浂锛屼究浜庝笅娆¤娆?
+ 265| /*鑾峰彇缂栫爜鍣ㄧ殑璁℃鍊煎閲忥紝骞惰绠楃數鏈烘棆杞?熷害*/
+ 266| /*Encoder_Get鍑芥暟锛屽彲浠ヨ幏鍙栦袱娆¤鍙栫紪鐮佸櫒鐨勮娆″?煎閲?*/
+ 267| /*缂栫爜鍣ㄧ閾佹棆杞竴鍦堬紝璁℃澧為噺涓?44锛岀紪鐮佸櫒璇诲彇闂撮殧鏄?50ms锛?0.05s锛?*/
+ 268| /*鍥犳纾侀搧鏃嬭浆閫熷害 = 璁℃澧為噺 / 44 / 0.05锛屽崟浣嶆槸杞瘡绉?*/
+ 269| /*骞宠　杞︿娇鐢ㄧ殑鐢垫満甯︽湁鍑忛?熺锛屽噺閫熸瘮涓?30*/
+ 270| /*鍥犳鐢垫満杈撳嚭杞存棆杞?熷害 = 纾侀搧鏃嬭浆閫熷害 / 30锛屽崟浣嶆槸杞瘡绉?*/
+ 274| /*淇″彿閲忚浆鎹?*/
+ 275| AveSpeed = (LeftSpeed + RightSpeed) / 2.0;	//鐢卞乏杞?熷害鍜屽彸杞?熷害璁＄畻寰楀埌骞冲潎閫熷害
+ 276| DifSpeed = LeftSpeed - RightSpeed;			//鐢卞乏杞?熷害鍜屽彸杞?熷害璁＄畻寰楀埌宸垎閫熷害
+ 279| if (runflag)					//RunFlag闈?0鏃讹紝鍚姩PID绋嬪簭
+ 282| SpeedPID.Actual = AveSpeed;			//閫熷害鐜疄闄呭?间负AveSpeed
+ 283| PID_Update(&SpeedPID);				//璋冪敤灏佽濂界殑鍑芥暟锛屼竴姝ュ畬鎴怭ID璁＄畻鍜屾洿鏂?
+ 284| AnglePID.Target = SpeedPID.Out;		//閫熷害鐜殑杈撳嚭鍊肩粰鍒拌搴︾幆鐨勭洰鏍囧?硷紝鏋勬垚涓茬骇PID
+ 287| DifSpeedFilter += 0.5f * (DifSpeed - DifSpeedFilter);	/* 杞悜閫熷害涓?闃朵綆閫氾細鎶戝埗缂栫爜鍣ㄥ櫔澹?/鎶栧姩锛岀郴鏁? 0.5 鍙皟(0.3鏇村钩婊?/0.7鏇磋窡鎵?) */
+ 288| TurnPID.Actual = DifSpeedFilter;			//杞悜鐜疄闄呭?间负DifSpeed
+ 289| PID_Update(&TurnPID);				//璋冪敤灏佽濂界殑鍑芥暟锛屼竴姝ュ畬鎴怭ID璁＄畻鍜屾洿鏂?
+ 290| DifPWM = (int16_t)(TurnPID.Out + TURN_FF * TurnPID.Target);	/* 杞悜鐜緭鍑? + 姝诲尯鍓嶉 */
+ 298| /* 鍊捐淇濇姢锛氬钩琛′腑鍊掑嚭 ERECT_START_ANG 鈫? 浜ょ粰鑷捣绔嬫祦绋嬫帴绠? */
+ 358| HAL_Delay(200);   // 绛夊緟 OLED 涓婄數绋冲畾锛岄伩鍏嶅喎鍚姩涓嶆樉绀?
+ 363| /* 涓婄數鐢ㄥ姞閫熷害璁℃妸鍊捐瀵瑰噯(闈欐鏃跺彲淇?)锛氬惁鍒欓檧铻虹Н鍒嗚鍗佸嚑绉掓墠鏀舵暃锛岃汉鍊掍笂鐢典細璇垽 */
+ 377| BlueSerial_Init();   // 鍒濆鍖栬摑鐗欎覆鍙ｆ帴鏀?
+ 390| // 棰勭疆瑙掑害鐜宸紝閬垮厤寰垎椤瑰啿鍑?
+ 392| AnglePID.Actual1 = Angle;   //鍚屾牱棰勭疆涓婃瀹為檯鍊硷紝闃叉寰垎椤圭涓?娆″啿鍑?
+ 408| if (runflag == 0)		//濡傛灉RunFlag涓?0
+ 410| PID_Init(&AnglePID);//鍚姩绋嬪簭鏃剁粰PID鍒濆鍖栵紝娓呴櫎涔嬪墠鍙兘閬楃暀鐨勫弬鏁?
+ 412| //				runflag= 1;		//鍒橰unFlag缃?1
+ 417| OLED_Printf(0, 0, OLED_6X8, "  Angle");						//OLED宸︿晶鏄剧ず瑙掑害鐜弬锟??
+ 444| /*姝ゅ鍙墽琛屾寜閿搷浣滐紝鐩墠绋嬪簭鏆傛椂娌＄敤鍒版寜锟??*/
+ 449| char *Value = strtok(NULL, ",");		//鎻愬彇鏁版嵁3锛屽畾涔変负婊戞潌锟??
+ 502| /* 鎽囨潌姝诲尯锛岄伩鍏嶄腑浣嶆姈鍔? */
+ 506| SpeedPID.Target = LV / 50.0;		//鎽囨潌鍊糒V缂╂斁鍚庯紝鎺у埗閫熷害鐜洰鏍囧?硷紝鍓嶅悗琛岃繘鎺у埗
+ 507| TurnPID.Target   = -RH / 50.0;				//鎽囨潌鍊糝H缂╂斁鍚庯紝鎺у埗杞悜鐜洰鏍囧?硷紝宸﹀彸杞集鎺у埗
+ 508| /* 鍙墦杞悜銆佷笉鎵撳墠杩涙椂锛岃嚜鍔ㄧ粰涓?鐐瑰墠杩涢?熷害锛氬師鍦拌浆瑕佷袱杞弽鎼撳湴闈紝闈欐懇鎿?+妯悜鍒摝鎵煩涓嶅灏变細鍗℃ */
+ 515| BlueSerial_RxFlag[i] = 0;				//澶勭悊瀹屾垚鍚庯紝鏍囧織浣嶇疆0锛屽厑璁告帴鏀朵笅锟??涓暟鎹寘
+
+

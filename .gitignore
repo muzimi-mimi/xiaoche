@@ -1,0 +1,10 @@
+# 安装介质与临时探针(不入库)
+.ps7-install/
+*.msi
+_probe*.bin
+_sp_trace.txt
+
+# 系统杂项
+Thumbs.db
+desktop.ini
+~$*

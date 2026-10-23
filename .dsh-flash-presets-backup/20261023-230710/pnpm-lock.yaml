@@ -1,0 +1,80 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: false
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      dsh-ops:
+        specifier: 0.4.1
+        version: 0.4.1
+      dsh-whale-widget:
+        specifier: 0.3.18
+        version: 0.3.18
+      graph-memory:
+        specifier: github:adoresever/graph-memory
+        version: https://codeload.github.com/adoresever/graph-memory/tar.gz/5841b1987c3967998818764c9d4238add5f3aa7c
+
+packages:
+
+  '@dsh-ops/bash-win32-x64@0.2.1':
+    resolution: {integrity: sha512-qK7Pm8ioRkjf+UBAqPOhogB0iPX/tBUmBhQSMdrBVJKOQjeLDHluRDOx1JdLHfxhW+oUJdu19TG/HXxDa9o7zw==}
+    cpu: [x64]
+    os: [win32]
+
+  '@sinclair/typebox@0.34.52':
+    resolution: {integrity: sha512-XiMQh7qqVlxZzcVD+kkGMNGMzcTrDMLWI7S4x7z1MkCkbDPrekpZXEUK0eZqZFMuHQg2a2DZOcDIh9o5v3Gonw==}
+
+  dsh-ops@0.4.1:
+    resolution: {integrity: sha512-TBG6jsMCrMowoHTBCgOcAZ2p/4GLeJi0Pbpq6irqbCBQNumPmYq1WIACDlEheg9XMQcDOkcnNs7XZgVmU2dkYA==}
+    engines: {node: ^22.19 || >=24}
+    cpu: [x64, arm64]
+    os: [win32, linux, darwin]
+    hasBin: true
+    peerDependencies:
+      '@deepseek-ai/cordis': ^4.0.4
+      '@deepseek-ai/dsh': ^0.2.0-rc.2
+    peerDependenciesMeta:
+      '@deepseek-ai/cordis':
+        optional: true
+      '@deepseek-ai/dsh':
+        optional: true
+
+  dsh-whale-widget@0.3.18:
+    resolution: {integrity: sha512-2RMevYiKTa2P+FzLutXlpTmQ9coWRbRQ7eG1b07MbkxB1HXXWbN/lqn0MZgDu49AILeJqmGivwB0S0H09pc9xQ==}
+
+  graph-memory@https://codeload.github.com/adoresever/graph-memory/tar.gz/5841b1987c3967998818764c9d4238add5f3aa7c:
+    resolution: {gitHosted: true, integrity: sha512-dQtAK37MMyD4MST+Ta4juG6CCHn8OpkdHA7Bz62qJygmu79htK3rla83KAEueNK4Pl1kVxqFwoThqfOqTwljKA==, tarball: https://codeload.github.com/adoresever/graph-memory/tar.gz/5841b1987c3967998818764c9d4238add5f3aa7c}
+    version: 1.6.0-beta.17
+    engines: {node: '>=22.13.0'}
+    peerDependencies:
+      '@deepseek-ai/cordis': '>=4'
+      '@deepseek-ai/dsh-typert-protocol': '>=0.1.0-rc.5'
+      openclaw: '*'
+    peerDependenciesMeta:
+      '@deepseek-ai/cordis':
+        optional: true
+      '@deepseek-ai/dsh-typert-protocol':
+        optional: true
+      openclaw:
+        optional: true
+
+snapshots:
+
+  '@dsh-ops/bash-win32-x64@0.2.1':
+    optional: true
+
+  '@sinclair/typebox@0.34.52': {}
+
+  dsh-ops@0.4.1:
+    optionalDependencies:
+      '@dsh-ops/bash-win32-x64': 0.2.1
+
+  dsh-whale-widget@0.3.18: {}
+
+  graph-memory@https://codeload.github.com/adoresever/graph-memory/tar.gz/5841b1987c3967998818764c9d4238add5f3aa7c:
+    dependencies:
+      '@sinclair/typebox': 0.34.52

@@ -1,0 +1,83 @@
+@@@ REPLACE 849 856
+                        /* ★ 转向方向修正：RH>0 必须让车右转。
+                         *   原写法 TurnPID.Target = RH/50.0 实测反了 —— 本车的"正差速
+                         *   指令"实际让车左转（通道顺序/电机极性镜像所致）。
+                         *   修正只翻参考值的符号：不动 TURN_FB_SIGN(main.c:200)，也不动
+                         *   TB6612 的通道映射 —— 动那两处会把转向环从负反馈翻成正反馈，
+                         *   表现为差速顶到 ±50 乱转。前馈 TURN_FF*Target 会跟着参考值一起
+                         *   翻，方向自然一致。
+                         *   纵向（速度）不受影响，两种模式都保留。 */
+                        if (LV > -5 && LV < 5) { LV = 0; }
+                        SpeedPID.Target = LV / 50.0;
+
+                        if (!TrackMode)                 /* 横向：摇杆转向（循迹模式下交给 CCD） */
+                        {
+                            /* 摇杆回中死区：消除 ±5 以内的零漂 */
+                            if (RH > -5 && RH < 5) { RH = 0; }
+                            TurnPID.Target = -RH / 50.0;   //RH>0=右转（负 Target = 右转，见上）
+                            if (TurnPID.Target != 0.0f && LV == 0)
+                                SpeedPID.Target = 0.20f;  /* 只转向不给速度时补一点前进速度 */
+                        }
+@@@ INSERT 766
+            else if (cmd == 'T' || cmd == 't')
+            {
+                /* 循迹开关：同时清掉旧的转向目标和丢线计数，避免切换瞬间打舵 */
+                TrackMode      = !TrackMode;
+                TrackLostCnt   = 0;
+                TurnPID.Target = 0.0f;
+            }
+@@@ INSERT 754
+        OLED_Printf(0, 56, OLED_6X8, "TRK%c%+05.2f", TrackMode ? '!' : '-', TurnPID.Target);/* ! = 循迹开；负号 = 右转 */
+@@@ REPLACE 696 696
+         *   y=56   TRK<!>+0.00 转向目标    (x=0,  宽 0..53)
+         *          S<左轮转速>             (x=84)
+@@@ INSERT 575
+
+        /* ---------- 循迹：中线偏差 -> 差速指令 ----------
+         * ★ 符号沿用摇杆修正后的约定：TurnPID.Target < 0 = 右转。
+         *   TRACK_DIR 的含义：CCD_Zhongzhi > 63（线落在像素序号大的一侧）时，
+         *   若那一侧是车的右侧 -> 应右转 -> Target 取负 -> TRACK_DIR = -1。
+         *   阵列装反/画面镜像时改成 +1，只需改这一个数。
+         *
+         * 丢线：CCD_Zhongzhi 在丢线时由 RD_TSL() 保持上一帧值(ccd.c:236)，跳变 >70
+         *   像素也被拒绝(ccd.c:239)，所以短期丢线不用管。但连续丢线超过
+         *   TRACK_LOST_MAX 帧必须放弃转向，否则线跑出视场后车会朝最后那个方向
+         *   一直转下去。 */
+        if (TrackMode && CarState == ST_BALANCE)
+        {
+            if (CCD_Lost)
+            {
+                if (TrackLostCnt < 255) TrackLostCnt++;
+            }
+            else
+            {
+                TrackLostCnt = 0;
+            }
+
+            if (TrackLostCnt >= TRACK_LOST_MAX)
+            {
+                TurnPID.Target = 0.0f;      /* 丢线太久：放弃转向，只保持直立 */
+            }
+            else
+            {
+                int16_t err = (int16_t)CCD_Zhongzhi - 63;   /* 63 = 128 像素阵列的几何中心 */
+                if (err > -TRACK_DEAD && err < TRACK_DEAD) err = 0;
+                TurnPID.Target = TRACK_DIR * TRACK_GAIN * (float)err / 63.0f;
+            }
+        }
+@@@ REPLACE 243 244
+    .OutMax = 5,					//输出限幅 ±5°：限制直立目标的最大倾斜角（原 10°，收紧以减小加速冲击）
+    .OutMin = -5,					
+@@@ INSERT 200
+
+/* ---------- CCD 循迹参数 ----------
+ * 约定：TurnPID.Target < 0 = 右转（与 joystick 分支的修正一致）。
+ * 默认 TrackMode = 0，烧录后行为与改前完全相同；蓝牙发 'T' 或 't' 才进入循迹。 */
+#define TRACK_DIR      (-1)     /* 线在像素序号大的一侧、且那侧是车右侧时取 -1；反了改 +1 */
+#define TRACK_GAIN     1.2f     /* 满偏(±63 像素)对应的差速指令(m/s)。前馈 TURN_FF=20 -> 24，
+                                 * 反馈还有 26 的空间（DifPWM 限幅 ±50）；>2.0 会一直顶在限幅上 */
+#define TRACK_DEAD     2        /* 中线死区(像素)：压掉 CCD_Zhongzhi 的 ±1 抖动 */
+#define TRACK_LOST_MAX 25       /* 连续丢线多少帧后放弃转向：25 帧 x 40ms = 1s */
+volatile uint8_t TrackMode    = 0;  /* 0=摇杆转向  1=CCD 循迹（蓝牙 'T'/'t' 切换） */
+volatile uint8_t TrackLostCnt = 0;  /* 连续丢线帧计数 */
+@@@ END

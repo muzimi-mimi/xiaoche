@@ -1,0 +1,19 @@
+repair table: 42 lines loaded
+Core\Inc\OLED.h              lines=63    converted=13    repaired=0    gbkPassthru=0    bytes 2555 -> 2464
+Core\Inc\OLED_Data.h         lines=42    converted=15    repaired=0    gbkPassthru=0    bytes 1066 -> 938
+Core\Inc\OLED_Font.h         lines=293   converted=1     repaired=0    gbkPassthru=0    bytes 9173 -> 9162
+Core\Inc\pid.h               lines=30    converted=16    repaired=0    gbkPassthru=0    bytes 772 -> 666
+Core\Src\main.c              lines=699   converted=98    repaired=42   gbkPassthru=73   bytes 26788 -> 25784
+   !! line 91: NOT GBK-REPRESENTABLE -> //static uint8_t RxState = 0;                 // 状�?�机状�??
+   !! line 130: NOT GBK-REPRESENTABLE -> .OutMax = 80,					//输出限幅的最大�??
+   !! line 131: NOT GBK-REPRESENTABLE -> .OutMin = -80,					//输出限幅的最小�??
+   !! line 496: NOT GBK-REPRESENTABLE -> OLED_Printf(0, 32, OLED_6X8, "T:%+05.1f", AnglePID.Target);	//角度环目标�??
+   !! line 497: NOT GBK-REPRESENTABLE -> OLED_Printf(0, 40, OLED_6X8, "Angle:%+05.1f", Angle);			//角度环实际�??
+   !! line 498: NOT GBK-REPRESENTABLE -> OLED_Printf(0, 48, OLED_6X8, "O:%+05.0f", AnglePID.Out);	//角度环输出�??
+Core\Src\MPU6050.c           lines=124   converted=25    repaired=0    gbkPassthru=0    bytes 4021 -> 3737
+Core\Src\pid.c               lines=65    converted=33    repaired=0    gbkPassthru=0    bytes 2487 -> 2060
+Core\Src\TB6612.c            lines=62    converted=6     repaired=0    gbkPassthru=0    bytes 2013 -> 1971
+Core\Src\OLED.c              lines=1472  converted=601   repaired=0    gbkPassthru=0    bytes 52615 -> 44653
+Core\Src\OLED_Data.c         lines=390   converted=19    repaired=0    gbkPassthru=0    bytes 16168 -> 15919
+
+TOTALS: converted=827  repairedLines=42  gbkPassthru=73

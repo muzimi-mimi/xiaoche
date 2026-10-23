@@ -1,0 +1,14 @@
+########## INTEGRITY: old (backup) vs new (converted) ##########
+
+Core\Inc\OLED.h            lines old=63    new=63    countOK  changedLines=13   asciiLinesAltered=0  PASS
+Core\Inc\OLED_Data.h       lines old=42    new=42    countOK  changedLines=15   asciiLinesAltered=0  PASS
+Core\Inc\OLED_Font.h       lines old=293   new=293   countOK  changedLines=1    asciiLinesAltered=0  PASS
+Core\Inc\pid.h             lines old=30    new=30    countOK  changedLines=16   asciiLinesAltered=0  PASS
+Core\Src\main.c            lines old=699   new=699   countOK  changedLines=171  asciiLinesAltered=0  PASS
+Core\Src\MPU6050.c         lines old=124   new=124   countOK  changedLines=25   asciiLinesAltered=0  PASS
+Core\Src\pid.c             lines old=65    new=65    countOK  changedLines=33   asciiLinesAltered=0  PASS
+Core\Src\TB6612.c          lines old=62    new=62    countOK  changedLines=6    asciiLinesAltered=0  PASS
+Core\Src\OLED.c            lines old=1472  new=1472  countOK  changedLines=601  asciiLinesAltered=0  PASS
+Core\Src\OLED_Data.c       lines old=390   new=390   countOK  changedLines=19   asciiLinesAltered=0  PASS
+
+RESULT: PASS - every pure-ASCII line is byte-identical; all changed lines are comments.

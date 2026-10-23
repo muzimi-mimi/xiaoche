@@ -1,0 +1,55 @@
+        /* ---- PA5 用户按键：三段循环  启动 -> 循迹 -> 关闭 -> 回到启动 ----
+         * 中断只置标志，这里消费（原因见 HAL_GPIO_EXTI_Callback 上方注释）。
+         *
+         * 不额外记一个 KeyStage 变量，而是直接从 CarState + TrackMode 推：
+         *   ① IDLE                     -> StartErect()   甩轮起立
+         *   ② BALANCE 且 TrackMode==0  -> TrackMode=1    进循迹
+         *   ③ BALANCE 且 TrackMode==1  -> StopCar()      关循迹+停车 -> 回 IDLE
+         * 这样"按键走到第几段"和"车真实处于哪一步"永远是同一份数据，
+         * 不会出现两边打架、按了第四次却还停在第二段的情形。
+         *
+         * OLED 对照（第 0 行 ST: + 第 7 行 TRK）：
+         *   ST:IDLE        -> 等第①击
+         *   ST:BAL + TRK-  -> 等第②击
+         *   ST:BAL + TRK!  -> 等第③击
+         *
+         * ST_ERECT（起立中）的按键故意忽略：
+         *   StartErect() 内部 Angle_Realign() 有 300ms 阻塞，按下去 0.3 秒内
+         *   车一点没动，人很容易以为没响应再按一次 —— 若那时生效，就会把刚
+         *   甩起来的车直接按停。起立最长 ERECT_TIMEOUT_MS(3s) 会自动转
+         *   BALANCE 或回 IDLE，所以"忽略"不会让按键卡死。 */
+        if (KeyFlag)
+        {
+            KeyFlag = 0;
+
+            if (CarState == ST_IDLE)
+            {
+                /* ① 起立。顺手关掉循迹：上一轮若是摔车/超时从 ST_BALANCE
+                 * 掉回来的，StopCar() 已经清过 TrackMode；这里再写一次是让
+                 * "起立时不带循迹"这条约束在代码上看得见（双保险）。 */
+                TrackMode    = 0;
+                TrackLostCnt = 0;
+                StartErect();
+            }
+            else if (CarState == ST_BALANCE)
+            {
+                if (!TrackMode)
+                {
+                    /* ② 进循迹。丢线计数、转向目标、直角状态一起清零，
+                     * 否则会带着上一轮的指令和 PIVOT 状态瞬间抢一下。 */
+                    TrackMode      = 1;
+                    TrackLostCnt   = 0;
+                    TurnPID.Target = 0.0f;
+                    CornerState    = CORNER_LINE;
+                    CornerSeen     = 0;
+                }
+                else
+                {
+                    /* ③ 关循迹 + 停车。TrackLostCnt 与 TurnPID.Target 由
+                     * StopCar() -> PID_ResetAll() 一并清掉，这里只说意图。 */
+                    TrackMode = 0;
+                    StopCar();
+                }
+            }
+            /* else: ST_ERECT —— 忽略（理由见上方注释） */
+        }

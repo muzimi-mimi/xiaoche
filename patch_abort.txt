@@ -1,0 +1,25 @@
+@@@P1
+#define ERECT_ABORT_GUARD_MS 300	/* 起立中按键生效门槛(ms)：ErectTime 到了才允许"放弃起立" */
+@@@P2
+         *   ④ ERECT                    -> StopCar()      放弃起立 -> 回 IDLE
+@@@P3
+         * ST_ERECT（起立中）的按键 = 放弃起立（第④击），不再无视：
+         *   生效门槛 ErectTime >= ERECT_ABORT_GUARD_MS(300)。
+         *   StartErect() 内部 Angle_Realign() 有 300ms 阻塞，这段里车完全不动，
+         *   很容易被当成"没响应"再按一次；那次 KeyFlag 会在 StartErect 返回后
+         *   立刻被消费，而此刻 ErectTime 还是 0 —— 没有门槛的话，刚甩起来的车
+         *   会被这一下直接按停。 */
+@@@P4
+            else
+            {
+                /* ④ 放弃起立。门槛见上方注释：ErectTime 是进入 ERECT 后的毫秒
+                 * 计数（StartErect 里清零、10ms 节拍里累加），用来挡掉 ① 之后
+                 * 那段 300ms 阻塞期里"以为没响应"的第二次按键。
+                 *
+                 * StopCar() 会一并清掉 TrackMode / TrackLostCnt / ErectTime，
+                 * 所以放弃起立后必定回到干净的 IDLE，下次按键还是从第①击开始。 */
+                if (ErectTime >= ERECT_ABORT_GUARD_MS)
+                {
+                    StopCar();
+                }
+            }

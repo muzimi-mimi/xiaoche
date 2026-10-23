@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="11" uniqueCount="11"><si><t>GMR 巨磁阻特性测量 · 实验数据记录表</t></si><si><t>测量阶段</t></si><si><t>励磁电流 I / mA</t></si><si><t>磁场 B / mT</t></si><si><t>GMR端电压 U / mV</t></si><si><t>GMR电流 I_GMR / mA</t></si><si><t>GMR电阻 R / Ω</t></si><si><t>相对磁阻变化率 ΔR/R₀ / %</t></si><si><t>正向测量</t></si><si><t>反向测量</t></si><si><t>回程测量</t></si></sst>

@@ -1,0 +1,101 @@
+@@USART3_FUNC@@
+/* ============================================================================
+ * 蓝牙串口 —— 照搬 PID 工程的 BlueSerial.c/.h
+ *   USART3:  PB10 = TX    PB11 = RX    9600 8N1
+ *   HC-05 / HC-06 / JDY-31 出厂默认就是 9600，插上即用，不需要先发 AT 命令。
+ *   PB10/PB11 在本工程完全空闲：
+ *       PB0/PB1 = CCD 的 CLK/SI，PB8/PB9 = OLED，PA9/PA10 = USART1，PA4 = CCD 的 AO
+ * ==========================================================================*/
+void MX_USART3_UART_Init(void)
+{
+  huart3.Instance = USART3;
+  huart3.Init.BaudRate = 9600;
+  huart3.Init.WordLength = UART_WORDLENGTH_8B;
+  huart3.Init.StopBits = UART_STOPBITS_1;
+  huart3.Init.Parity = UART_PARITY_NONE;
+  huart3.Init.Mode = UART_MODE_TX_RX;
+  huart3.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart3.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+@@USART3_MSPINIT@@
+  else if(uartHandle->Instance==USART3)
+  {
+    /* USART3 clock enable */
+    __HAL_RCC_USART3_CLK_ENABLE();
+
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    /**USART3 GPIO Configuration
+    PB10     ------> USART3_TX
+    PB11     ------> USART3_RX
+    */
+    GPIO_InitStruct.Pin = GPIO_PIN_10;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+    GPIO_InitStruct.Pin = GPIO_PIN_11;
+    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+    /* USART3 interrupt Init */
+    HAL_NVIC_SetPriority(USART3_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(USART3_IRQn);
+  /* USER CODE BEGIN USART3_MspInit 1 */
+
+  /* USER CODE END USART3_MspInit 1 */
+  }
+@@USART3_MSPDEINIT@@
+  else if(uartHandle->Instance==USART3)
+  {
+    /* Peripheral clock disable */
+    __HAL_RCC_USART3_CLK_DISABLE();
+
+    /**USART3 GPIO Configuration
+    PB10     ------> USART3_TX
+    PB11     ------> USART3_RX
+    */
+    HAL_GPIO_DeInit(GPIOB, GPIO_PIN_10|GPIO_PIN_11);
+
+    /* USART3 interrupt Deinit */
+    HAL_NVIC_DisableIRQ(USART3_IRQn);
+  /* USER CODE BEGIN USART3_MspDeInit 1 */
+
+  /* USER CODE END USART3_MspDeInit 1 */
+  }
+@@USART3_IRQ@@
+/**
+  * @brief This function handles USART3 global interrupt.
+  */
+void USART3_IRQHandler(void)
+{
+  /* USER CODE BEGIN USART3_IRQn 0 */
+
+  /* USER CODE END USART3_IRQn 0 */
+  HAL_UART_IRQHandler(&huart3);
+  /* USER CODE BEGIN USART3_IRQn 1 */
+
+  /* USER CODE END USART3_IRQn 1 */
+}
+@@PD@@
+/* ---- 蓝牙（USART3 / PB10=TX / PB11=RX / 9600）发送分频 ----
+ * CCD 帧周期 = CCD_Div x 10ms = 40ms；9600 下每帧发一次约占 16ms，取 1 就够。
+ * 若发现有线 460800 那一路的帧率被拖慢，改成 2 或 3；设 0 则完全关闭蓝牙。 */
+#define BT_DIV   1
+@@PV@@
+static uint16_t bt_div = 0;      /* 蓝牙发送分频计数器，见 BT_DIV */
+@@LOOP@@
+		/* ---- 蓝牙通道：纯文本一行 Max Min Left Right Lost ---- */
+#if BT_DIV > 0
+		if (++bt_div >= BT_DIV)
+		{
+			bt_div = 0;
+			BlueSerial_Printf("%d %d %d %d %d\r\n",
+			                  (int)CCD_Max, (int)CCD_Min,
+			                  (int)CCD_Left, (int)CCD_Right, (int)CCD_Lost);
+		}
+#endif

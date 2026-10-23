@@ -1,0 +1,14 @@
+
+        /* ---------- 偏航角：Z轴陀螺积分 ----------
+         * 移植自参考工程 24.STM32-MPU6050，三处必要改动：
+         *   1) 量程：本工程 GYRO_CONFIG=0x18(±2000°/s) → 16.384 LSB/(°/s)；
+         *      参考工程是 0x00(±250°/s) 的 131。直接照抄 131 会让偏航角大 8 倍。
+         *   2) dt 固定 0.01f：控制周期恒定，比参考工程 HAL_GetTick() 的 1ms 分辨率更准。
+         *   3) float 而非 double：Cortex-M3 无 FPU，double 除法约贵 5 倍。 */
+        YawRate = GZ / YAW_LSB_PER_DPS - YAW_BIAS_DPS;
+        if (YawRate > -YAW_DEADZONE_DPS && YawRate < YAW_DEADZONE_DPS) YawRate = 0.0f;
+        Yaw += YawRate * YAW_DT;
+#if YAW_WRAP
+        if      (Yaw >  180.0f) Yaw -= 360.0f;
+        else if (Yaw < -180.0f) Yaw += 360.0f;
+#endif

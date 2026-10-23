@@ -1,0 +1,413 @@
+/* ============================================================================
+ * TSL1401 线性 CCD 模块（HAL 移植版）
+ *
+ * 完全模仿：D:\Users\huang\Desktop\keil\CCD控制舵机\HARDWARE\CCD\ccd.c
+ * 接口与偏离说明见 ccd.h 头部。
+ *
+ * 引脚（本工程 = 考试板 CN3）：CLK = PB0，SI = PB1，AO = PA4 (ADC1_IN4)
+ * ==========================================================================*/
+
+#include "ccd.h"
+#include "adc.h"
+#include "usart.h"
+#include <stdio.h>
+
+/* ---------------- 引脚操作，等价于参考工程的 TSL_CLK / TSL_SI 宏 ---------------- */
+#define TSL_CLK_H   HAL_GPIO_WritePin(CLK_GPIO_Port, CLK_Pin, GPIO_PIN_SET)
+#define TSL_CLK_L   HAL_GPIO_WritePin(CLK_GPIO_Port, CLK_Pin, GPIO_PIN_RESET)
+#define TSL_SI_H    HAL_GPIO_WritePin(SI_GPIO_Port,  SI_Pin,  GPIO_PIN_SET)
+#define TSL_SI_L    HAL_GPIO_WritePin(SI_GPIO_Port,  SI_Pin,  GPIO_PIN_RESET)
+
+/* ---------------- 与参考工程同名的全局量 ---------------- */
+uint8_t  ccd_adc[CCD_PIXELS] = {0};
+uint16_t ccd_raw[CCD_PIXELS] = {0};
+uint8_t  SciBuf[200] = {0};
+
+/* 参考工程里 TIME_us 是"曝光时间"旋钮，因为它的曝光时间就等于一帧总时长。
+ * 本工程的曝光由 TIM3 x CCD_Div 独立控制，所以这里 TIME_us 只决定 CLK 快慢：
+ * 半周期大约 (TIME_us + GPIO/ADC 开销) us。取 2 -> CLK 约 110kHz，
+ * 一帧读出约 0.6ms，剩下的时间都留给积分（曝光）。
+ * 参考工程那份慢是因为它的 ADC 采样时间设了 239.5 周期(21us/像素)。 */
+int TIME_us = 2;
+
+uint8_t  CCD_Zhongzhi = 64;
+uint8_t  CCD_Yuzhi    = 0;
+uint8_t  CCD_Left     = 0;
+uint8_t  CCD_Right    = CCD_PIXELS - 1;
+uint8_t  CCD_Width    = 0;
+uint16_t CCD_Max      = 0;
+uint16_t CCD_Min      = 0;
+
+volatile uint8_t CCD_Lost = 1;      /* 上电第一帧之前按"没找到线"处理 */
+
+/* ==========================================================================*/
+
+static uint16_t get_ADC(void)
+{
+	HAL_ADC_Start(&hadc1);
+	HAL_ADC_PollForConversion(&hadc1, 50);
+	return (uint16_t)HAL_ADC_GetValue(&hadc1);
+}
+
+static void DWT_Init(void)
+{
+	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+	DWT->CYCCNT = 0;
+	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+}
+
+/* 参考工程的 Dly_us() 是 for(ii=0;ii<a;ii++); 空循环体，实测不产生延时
+ * （-O2 下整条被删），而且延时量随优化等级漂移，不能当时间基准用。
+ * 这里换成 DWT 周期计数器，函数名和签名保持不变。
+ * 顺带说明：原实现里那个"把 SysTick->CTRL 置 0x04"的写法会把 HAL 的 1ms
+ * 时基整个关掉，HAL_GetTick() 开机 30ms 后永久冻结，所以也不能用 SysTick。 */
+void Dly_us(int a)
+{
+	static uint8_t inited = 0;
+	uint32_t start, ticks;
+
+	if (a <= 0) return;
+	if (!inited) { DWT_Init(); inited = 1; }
+
+	start = DWT->CYCCNT;
+	ticks = (uint32_t)a * (SystemCoreClock / 1000000U);
+	while ((DWT->CYCCNT - start) < ticks);
+}
+
+/* 参考工程的 Ccd_Init() 自己做 GPIO 初始化（标准外设库）。
+ * 本工程 PB0/PB1 已由 CubeMX 生成的 MX_GPIO_Init() 配成推挽输出，
+ * 所以这里只把空闲电平设成参考工程的初始状态，保持接口名一致。 */
+void Ccd_Init(void)
+{
+	TSL_CLK_H;
+	TSL_SI_L;
+}
+
+/* ============================================================================
+ * RD_TSL()：按 TSL1401 时序读出 128 个像素，然后算阈值、找沿、定中线。
+ * 与参考工程逐句对应，注释里标出偏离处。
+ * ==========================================================================*/
+void RD_TSL(void)
+{
+	uint8_t  i = 0, tslp = 0;
+	uint8_t  j = 0;
+	uint8_t  lfound, rfound;
+
+	static uint8_t  Last_CCD_Zhongzhi = 64;        /* 与参考一致：static 记住上一帧 */
+	static uint16_t value1_max, value1_min;        /* 与参考同名 */
+	static uint16_t ThMax = 0, ThMin = 0;          /* 阈值专用的平滑后 max/min */
+	static uint8_t  ThInited = 0;                  /* 首帧用原始值直接初始化，不做低通 */
+
+	/* ---- 1) SI 脉冲：SI 抬高期间给一个 CLK 上升沿，启动本次输出 ---- */
+	TSL_CLK_H;                  /* CLK 引脚设为高电平 */
+	TSL_SI_L;
+	Dly_us(TIME_us);
+
+	TSL_SI_H;
+	TSL_CLK_L;
+	Dly_us(TIME_us);
+
+	TSL_CLK_H;                  /* 先抬 CLK */
+	TSL_SI_L;                   /* 再落 SI —— 靠这两句的先后抢 SI 的建立时间 */
+	Dly_us(TIME_us);            /* 与参考完全一致 */
+
+	/* ---- 2) 逐个读出 128 个像素（CLK 低电平期间 AO 有效） ---- */
+	for (i = 0; i < CCD_PIXELS; i++)
+	{
+		TSL_CLK_L;
+		Dly_us(TIME_us);
+		ccd_raw[tslp] = get_ADC();
+		ccd_adc[tslp] = (uint8_t)(ccd_raw[tslp] >> 4);   /* 同参考：12位 -> 8位 */
+		++tslp;
+		TSL_CLK_H;
+		Dly_us(TIME_us);
+	}
+	/* 第 129 个时钟：结束本次输出。参考工程没发这个时钟，这里补上更稳。 */
+	TSL_CLK_L;
+	Dly_us(TIME_us);
+	TSL_CLK_H;
+	Dly_us(TIME_us);
+
+	/* ---- 3) 动态阈值：两端各去掉 5 个点（与参考一致） ----
+	 * 偏离：参考是从 ccd_adc[0] 起算最大/最小值的，可 [0,5) 并不在统计区间里，
+	 * 第 0 个点只要是坏点就会污染整个阈值。这里改成从区间内的第 1 个点起算。 */
+	value1_max = ccd_adc[5];
+	for (i = 5; i < 123; i++)
+	{
+		if (value1_max <= ccd_adc[i])
+			value1_max = ccd_adc[i];
+	}
+
+	value1_min = ccd_adc[5];
+	for (i = 5; i < 123; i++)
+	{
+		if (value1_min >= ccd_adc[i])
+			value1_min = ccd_adc[i];
+	}
+
+	CCD_Max   = value1_max;      /* 屏上/串口仍报原始值，方便看真实动态范围 */
+	CCD_Min   = value1_min;
+
+	/* ---- 3b) 阈值帧间平滑 ----
+	 * 找沿用的是"连续 3 个 + 严格不等号"，它的有效阈值是一排离散的齿、齿间有洞：
+	 * 过渡像素恰好等于阈值时，> 和 < 同时不成立，整条沿直接消失。所以 T 只要帧间
+	 * 抖 1 级，沿就会在相邻两齿之间跳 1~2 个像素 —— 实测静止时 ±0.5px、运动时 ±2.7px。
+	 * 这里对 max/min 做一阶低通，把 T 按在同一个齿里。
+	 * 只有 CCD_Yuzhi 用平滑值，CCD_Max/Min 保持原始，否则屏上的动态范围和阈值对不上。 */
+	if (ThInited == 0)
+	{
+		ThMax    = value1_max;
+		ThMin    = value1_min;
+		ThInited = 1;
+	}
+	else
+	{
+		ThMax = (uint16_t)((ThMax * 3 + value1_max) >> CCD_TH_SHIFT);
+		ThMin = (uint16_t)((ThMin * 3 + value1_min) >> CCD_TH_SHIFT);
+	}
+
+	CCD_Yuzhi = (uint8_t)((ThMax + ThMin) / 2);   /* 本次中线提取的阈值 */
+
+	/* ---- 4) 找左右跳变沿 ----
+	 * 白底黑线：黑线是"低"区。左沿找 高->低，右沿找 低->高。 */
+	lfound = 0;
+	rfound = 0;
+
+	/* 找沿前复位到哨兵值。原来只靠上电初值，一旦找到过就再也不复位，于是
+	 * "这一帧没找到"和"这一帧找到了"在屏上、串口里完全分不出来 —— 实测日志
+	 * 开头那 97 帧的 (0,127) 就是这么来的。复位后 (0,127) 明确表示"本帧没找到沿"。 */
+	CCD_Left  = 0;
+	CCD_Right = CCD_PIXELS - 1;
+
+	for (i = 5; i < 118; i++)                       /* 寻找左边跳变沿 */
+	{
+		if (ccd_adc[i]   > CCD_Yuzhi && ccd_adc[i+1] > CCD_Yuzhi && ccd_adc[i+2] > CCD_Yuzhi &&
+		    ccd_adc[i+3] < CCD_Yuzhi && ccd_adc[i+4] < CCD_Yuzhi && ccd_adc[i+5] < CCD_Yuzhi)
+		{
+			CCD_Left = i;
+			lfound   = 1;
+			break;
+		}
+	}
+
+	for (j = 118; j > 5; j--)                       /* 寻找右边跳变沿 */
+	{
+		if (ccd_adc[j]   < CCD_Yuzhi && ccd_adc[j+1] < CCD_Yuzhi && ccd_adc[j+2] < CCD_Yuzhi &&
+		    ccd_adc[j+3] > CCD_Yuzhi && ccd_adc[j+4] > CCD_Yuzhi && ccd_adc[j+5] > CCD_Yuzhi)
+		{
+			CCD_Right = j;
+			rfound    = 1;
+			break;
+		}
+	}
+
+	/* ---- 5) 成对合理性检查 + 中线 + 丢线判定 ----
+	 * 偏离：参考工程里 Left/Right 是 static 且从不复位，找不到沿时就沿用上一帧的
+	 * 值，于是"线丢了"这件事对外完全不可见 —— 考核里"进无循迹区要切直线"就没有
+	 * 切换信号可用。这里保留"继续用上一帧中线"的行为，但把丢线状态显式报出去。 */
+	if (lfound && rfound && CCD_Right > CCD_Left)
+	{
+		/* 判据从 max-min 换成三件事（依据 712 帧串口日志）：
+		 *   a) 右沿必须在左沿右边。左右两次搜索各自独立扫描、中间没有配对约束，
+		 *      实测 19.5% 的帧右沿落在左沿左边，算出来的"中线"完全无意义；
+		 *   b) 线宽落在 [CCD_LW_MIN, CCD_LW_MAX]（实测有效线宽 16~28）；
+		 *   c) 线外白 - 线内黑 >= CCD_CONTRAST_MIN，量的是局部对比度。
+		 * 原来用的 max-min 等于 c+g，光照梯度会把门限灌水（画面越不匀越容易过），
+		 * 而且实测只有 10~13，永远达不到 20 —— 所以 CCD_Zhongzhi 从开机起就冻在 64。
+		 * 注意 CCD_Left 由循环保证落在 [5,117]，下面两个下标分别落在 [0,112]、[10,122]。 */
+		uint8_t lw  = (uint8_t)(CCD_Right - CCD_Left);
+		uint8_t wpx = ccd_adc[CCD_Left - 5];    /* 线左侧的白 */
+		uint8_t bpx = ccd_adc[CCD_Left + 5];    /* 线内的黑 */
+
+		if (lw >= CCD_LW_MIN && lw <= CCD_LW_MAX &&
+		    wpx > bpx && (uint8_t)(wpx - bpx) >= CCD_CONTRAST_MIN)
+		{
+			CCD_Width    = lw;
+			CCD_Zhongzhi = (uint8_t)((CCD_Right + CCD_Left) / 2);   /* 计算中线位置 */
+			CCD_Lost     = 0;
+		}
+		else
+		{
+			CCD_Lost = 1;   /* 沿不配对 / 线宽离谱 / 局部对比度不够 = 本帧不作数 */
+		}
+	}
+	else
+	{
+		CCD_Lost = 1;       /* CCD_Zhongzhi 维持上一帧的值，不至于突然打满舵 */
+	}
+
+	if (myabs((int)CCD_Zhongzhi - (int)Last_CCD_Zhongzhi) > 70)   /* 跳变太大 */
+		CCD_Zhongzhi = Last_CCD_Zhongzhi;                        /* 就取上一次的值 */
+
+	Last_CCD_Zhongzhi = CCD_Zhongzhi;
+}
+
+/* 兼容旧调用：本工程 main.c 原来直接调 get_CCD() */
+void get_CCD(void)
+{
+	RD_TSL();
+}
+
+int myabs(int a)
+{
+	int temp;
+	if (a < 0) temp = -a;
+	else       temp = a;
+	return temp;
+}
+
+/* ============================================================================
+ * 上位机通信：把 ccd_adc[] 组帧进 SciBuf[]，再按协议发出去。
+ * 协议：* LD 00000000 <128 字节 x 2 位十六进制> 00 #
+ * ==========================================================================*/
+
+/* 组帧（参考的 slove_data 去掉开头那次 RD_TSL） */
+static void PackSciBuf(void)
+{
+	int i;
+	SciBuf[0] = 0;
+	SciBuf[1] = 132;
+	SciBuf[2] = 0;
+	SciBuf[3] = 0;
+	SciBuf[4] = 0;
+	SciBuf[5] = 0;
+	for (i = 0; i < CCD_PIXELS; i++)
+		SciBuf[6 + i] = ccd_adc[i];
+}
+
+void slove_data(void)
+{
+	RD_TSL();          /* 与参考一致：组帧前先采一帧 */
+	PackSciBuf();
+}
+
+void sendToPc(void)
+{
+	int i;
+	slove_data();
+	printf("*");
+	printf("LD");
+	for (i = 2; i < 134; i++) {
+		printf("%c", binToHex_high(SciBuf[i]));   /* 高 4 位对应的十六进制字符 */
+		printf("%c", binToHex_low(SciBuf[i]));    /* 低 4 位对应的十六进制字符 */
+	}
+	printf("00");     /* 通信协议要求 */
+	printf("#");      /* 通信协议要求 */
+}
+
+/* 只发帧、不重新采集。配合 TIM3 定时采集用，免得在中断里又采一遍。
+ * 字节流与 sendToPc() 完全一致，但改成一次 HAL_UART_Transmit：
+ * 参考那版是 270 次阻塞 printf，每次都在 fputc 里等一个字节发完。 */
+void CCD_SendFrame(void)
+{
+	static uint8_t tx[270];
+	int i, n = 0;
+
+	PackSciBuf();
+	tx[n++] = '*';
+	tx[n++] = 'L';
+	tx[n++] = 'D';
+	for (i = 2; i < 134; i++) {
+		tx[n++] = (uint8_t)binToHex_high(SciBuf[i]);
+		tx[n++] = (uint8_t)binToHex_low(SciBuf[i]);
+	}
+	tx[n++] = '0';
+	tx[n++] = '0';
+	tx[n++] = '#';
+
+	HAL_UART_Transmit(&huart3, tx, (uint16_t)n, 0xFFFF);   /* TX = Bluetooth USART3 (was huart1 / TTL) */
+}
+
+char binToHex_low(uint8_t num)
+{
+	uint8_t low_four;
+	low_four = num & 0x0f;
+	if      (low_four == 0)  return('0');
+	else if (low_four == 1)  return('1');
+	else if (low_four == 2)  return('2');
+	else if (low_four == 3)  return('3');
+	else if (low_four == 4)  return('4');
+	else if (low_four == 5)  return('5');
+	else if (low_four == 6)  return('6');
+	else if (low_four == 7)  return('7');
+	else if (low_four == 8)  return('8');
+	else if (low_four == 9)  return('9');
+	else if (low_four == 10) return('A');
+	else if (low_four == 11) return('B');
+	else if (low_four == 12) return('C');
+	else if (low_four == 13) return('D');
+	else if (low_four == 14) return('E');
+	else if (low_four == 15) return('F');
+	return('0');        /* 参考这里没有兜底 return，补一个免得编译器报"并非所有路径都有返回值" */
+}
+
+char binToHex_high(uint8_t num)
+{
+	uint8_t high_four;
+	high_four = (num >> 4) & 0x0f;
+	if      (high_four == 0)  return('0');
+	else if (high_four == 1)  return('1');
+	else if (high_four == 2)  return('2');
+	else if (high_four == 3)  return('3');
+	else if (high_four == 4)  return('4');
+	else if (high_four == 5)  return('5');
+	else if (high_four == 6)  return('6');
+	else if (high_four == 7)  return('7');
+	else if (high_four == 8)  return('8');
+	else if (high_four == 9)  return('9');
+	else if (high_four == 10) return('A');
+	else if (high_four == 11) return('B');
+	else if (high_four == 12) return('C');
+	else if (high_four == 13) return('D');
+	else if (high_four == 14) return('E');
+	else if (high_four == 15) return('F');
+	return('0');
+}
+
+/* ============================================================================
+ * 自动曝光
+ * ============================================================================
+ * 曝光时间 = 两次 SI 脉冲的间隔 = CCD_Div x TIM3 周期(10ms)
+ * 每帧采完后统计最亮像素：
+ *   低于 CCD_TARGET_LO -> 加曝光（太暗）
+ *   高于 CCD_TARGET_HI -> 减曝光（太亮，快饱和了）
+ *   两个阈值之间是死区，避免在临界点反复抖动。
+ * 若某帧想用固定曝光，不调用 CCD_AutoExposure() 即可。
+ *
+ * 注意：这里统计的是 ccd_raw[] 的 12 位原值。用 8 位的 ccd_adc[] 当判据太粗 ——
+ * 一个量化台阶就是 16 LSB，整个死区才两三个台阶。
+ * ==========================================================================*/
+volatile uint16_t CCD_Div = 4;              
+                                              /* 注意：100ms 已经是 TSL1401CL 数据手册
+                                              * t_int 推荐范围(0.03375~100ms)的上限，
+                                              * 再往上加是超规格运行。*/
+
+#define CCD_DIV_MIN     1                   /* 10ms  —— 最短曝光 */
+#define CCD_DIV_MAX     60                  /* 600ms —— 最长曝光（极暗环境） */
+#define CCD_FULL_SCALE  4095                /* 12 位满量程 */
+#define CCD_TARGET_LO   (CCD_FULL_SCALE * 62 / 100)   /* 4095 -> 2538 */
+#define CCD_TARGET_HI   (CCD_FULL_SCALE * 92 / 100)   /* 4095 -> 3767 */
+
+void CCD_AutoExposure(void)
+{
+	uint8_t  i;
+	uint16_t mx = 0, step;
+
+	for (i = 0; i < CCD_PIXELS; i++)
+	{
+		if (ccd_raw[i] > mx) mx = ccd_raw[i];
+	}
+
+	if (mx < CCD_TARGET_LO)                 /* 太暗，加曝光 */
+	{
+		step = (mx < CCD_TARGET_LO / 3) ? 4 : 1;   /* 差得多就大步快调 */
+		if ((uint32_t)CCD_Div + step > CCD_DIV_MAX) CCD_Div = CCD_DIV_MAX;
+		else                                        CCD_Div += step;
+	}
+	else if (mx > CCD_TARGET_HI)            /* 太亮，减曝光 */
+	{
+		if (CCD_Div > CCD_DIV_MIN + 1) CCD_Div -= 1;
+		else                           CCD_Div  = CCD_DIV_MIN;
+	}
+	/* 落在死区内 -> CCD_Div 保持不动 */
+}

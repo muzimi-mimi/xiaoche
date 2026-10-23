@@ -1,0 +1,23 @@
+*** Using Compiler 'V5.06 update 5 (build 528)', folder: 'D:\keil5\ARM\ARMCC\Bin'
+Build target 'PID'
+compiling main.c...
+../Core/Inc/myI2C.h(16): warning:  #1-D: last line of file ends without a newline
+  #endif
+../Core/Inc/MPU6050.h(15): warning:  #1-D: last line of file ends without a newline
+  #endif
+../Core/Inc/SR04.h(8): warning:  #1-D: last line of file ends without a newline
+  #endif
+../Core/Src/main.c(526): warning:  #177-D: variable "lastSendTime"  was declared but never referenced
+          static uint32_t lastSendTime = 0;
+../Core/Src/main.c(502): warning:  #550-D: variable "ID"  was set but never used
+      uint8_t ID;
+../Core/Src/main.c(84): warning:  #177-D: variable "ReviveCount"  was declared but never referenced
+  static uint8_t ReviveCount = 0;   // 自动复活计数
+../Core/Src/main.c(128): warning:  #177-D: variable "Count2"  was declared but never referenced
+  static uint16_t Count2 = 0;			//转向环10ms计数
+../Core/Src/main.c: 7 warnings, 0 errors
+linking...
+Program Size: Code=20752 RO-data=2960 RW-data=296 ZI-data=2736  
+FromELF: creating hex file...
+"PID\PID.axf" - 0 Error(s), 7 Warning(s).
+Build Time Elapsed:  00:00:02

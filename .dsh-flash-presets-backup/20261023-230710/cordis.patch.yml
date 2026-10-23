@@ -1,0 +1,106 @@
+- insert:
+    - id: file-changes
+      name: '@deepseek-ai/dsh-file-changes'
+
+- id: plugin-package-inventory-deepseek
+  name: '@deepseek-ai/dsh-plugin-package-inventory-deepseek'
+  config:
+    enabled: false
+- insert:
+    - id: client-file-changes
+      name: '@deepseek-ai/dsh-client-file-changes'
+- insert:
+    - id: unified-market
+      name: 'dsh-unified-market'
+- insert:
+    - id: easy-setup
+      name: '@deepseek-ai/dsh-easy-setup'
+- insert:
+    - id: eac-locale-compat
+      name: 'dsh-eac-locale-compat'
+- insert:
+    - id: viewport-lock
+      name: 'dsh-viewport-lock'
+- insert:
+    - id: compact
+      name: 'dsh-compact'
+- insert:
+    - id: plugin-shield
+      name: 'dsh-plugin-shield'
+- insert:
+    - id: settings-scroll-fix
+      name: 'dsh-settings-scroll-fix'
+- id: agent-default-model
+  name: "@deepseek-ai/dsh-agent-default-model"
+  config:
+    provider: deepseek-account
+    model: deepseek-flash
+    reasoningEffort: max
+- id: ui-settings-account
+  name: "@deepseek-ai/dsh-client-ui-settings-account"
+  config:
+    version: 1
+    step: done
+    purpose: development
+    process: detailed
+    completion: completed
+    usage: detailed
+    developerTools: true
+- id: ui-chat
+  name: "@deepseek-ai/dsh-client-ui-chat"
+  config:
+    transcriptView: detailed
+    performanceUsage: detailed
+- id: ui-settings
+  name: "@deepseek-ai/dsh-client-ui-settings"
+  config:
+    enabled: true
+- id: ui-conversation
+  name: "@deepseek-ai/dsh-client-ui-conversation"
+  config:
+    busyEnter: steer
+
+# 插件管理（设置页「插件」栏）：启用 dsh-whale-widget
+- id: dsh-whale-widget
+  name: 'dsh-whale-widget'
+  disabled: false
+
+# 插件管理（设置页「插件」栏）：启用 graph-memory
+- id: graph-memory
+  disabled: false
+- id: llm-pi-ai
+  name: "@deepseek-ai/dsh-llm-pi-ai"
+  config:
+    providers:
+      j0721:
+        displayName: deepseek-v4-flash-vision
+        apiKeyEnv: J0721_API_KEY
+        api: openai-completions
+        baseURL: https://discovery.intern-ai.org.cn/
+        models:
+          - id: deepseek-v4-flash-vision
+            contextWindow: 1000000
+            input:
+              - text
+              - image
+
+# 插件管理（设置页「插件」栏）：关闭 dsh-ops
+- id: dsh-ops
+  name: 'dsh-ops'
+  disabled: true
+- id: dsh-ops-file
+  name: dsh-ops/file
+  config:
+    promptPolicy: true
+    required: false
+    configUpdateVersion: 2
+- id: dsh-ops-shell
+  name: dsh-ops/shell
+  config:
+    promptPolicy: true
+    publishBashTool: true
+    shellPolicy: advise
+    allowSystemShellFallback: false
+    configUpdateVersion: 2
+- id: dsh-ops-tui
+  disabled: true

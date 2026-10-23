@@ -1,0 +1,878 @@
+/* USER CODE BEGIN Header */
+/**
+  ******************************************************************************
+  * @file           : main.c
+  * @brief          : Main program body
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2026 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+/* USER CODE END Header */
+/* Includes ------------------------------------------------------------------*/
+#include "main.h"
+#include "adc.h"
+#include "tim.h"
+#include "usart.h"
+#include "gpio.h"
+
+/* Private includes ----------------------------------------------------------*/
+/* USER CODE BEGIN Includes */
+#include "OLED.h"
+#include "stm32f1xx_it.h"
+#include "stdio.h"
+#include <stdarg.h>
+#include "myI2C.h"
+#include "MPU6050.h"
+#include "SR04.h"
+#include "TB6612.h"
+#include "encode.h"
+#include "PID.h"
+#include <math.h>
+#include <string.h>
+#include <stdlib.h>
+
+#include "BlueSerial.h"
+/* USER CODE END Includes */
+
+/* Private typedef -----------------------------------------------------------*/
+/* USER CODE BEGIN PTD */
+
+/* USER CODE END PTD */
+
+/* Private define ------------------------------------------------------------*/
+/* USER CODE BEGIN PD */
+
+/* USER CODE END PD */
+
+/* Private macro -------------------------------------------------------------*/
+/* USER CODE BEGIN PM */
+
+/* USER CODE END PM */
+
+/* Private variables ---------------------------------------------------------*/
+
+/* USER CODE BEGIN PV */
+
+/* USER CODE END PV */
+
+/* Private function prototypes -----------------------------------------------*/
+void SystemClock_Config(void);
+/* USER CODE BEGIN PFP */
+
+/* USER CODE END PFP */
+
+/* Private user code ---------------------------------------------------------*/
+/* USER CODE BEGIN 0 */
+
+/* ==========================================================================
+ *                    两轮自平衡小车 —— 控制结构总览
+ * ==========================================================================
+ *
+ * 硬件：STM32F103C8T6 @72MHz / MPU6050(软件I2C: PB3,PB4) / TB6612 + 双编码器
+ *       OLED(软件I2C: PB8,PB9) / USART3 蓝牙(9600) / SR04 超声波 / CCD 线阵(ADC1_IN4)
+ *
+ * 节拍（唯一时基是 TIM3 的 1ms 中断，见 HAL_TIM_PeriodElapsedCallback）：
+ *
+ *      1ms   ── hcount++ ；检查是否摔倒
+ *      10ms  ── 读 MPU6050 -> 姿态解算 -> 偏航积分 -> 直立环 / 自起立
+ *      50ms  ── 读编码器 -> 算速度 -> 速度环 + 转向环
+ *
+ * 串级结构（外环慢、内环快）：
+ *
+ *      速度环(50ms) ──输出──> AnglePID.Target ──┐
+ *                                              ├─> 直立环(10ms) ──> AvePWM ─┐
+ *      转向环(50ms) ────────────────────────────┼─> DifPWM ─────────────────┤
+ *                                              │                           │
+ *                          LeftPWM  = AvePWM + DifPWM/2  <─────────────────┤
+ *                          RightPWM = AvePWM - DifPWM/2  <─────────────────┘
+ *
+ * 三个运行状态由 CarState 管理（见下方状态机定义）。
+ * 主循环(while(1))只做三件事：刷 OLED、收蓝牙命令、发上位机波形，
+ * 所有实时控制都在中断里 —— 因为 OLED_Update() 走软件 I2C 推 1024 字节，
+ * 一次要 ~40ms，是主循环周期(~44.6ms)的绝大部分。
+ * ========================================================================== */
+
+/* ===== 车辆状态机（取代早期的 runflag 布尔量）=====
+ *
+ *   ST_IDLE     上电默认。电机断电，等蓝牙指令；每 10ms 也写一次 PWM=0
+ *   ST_ERECT    自起立。甩轮把车摆进平衡窗口，最长 ERECT_TIMEOUT_MS(3s)
+ *   ST_BALANCE  正常直立行驶。只有这个状态才跑平衡环 + 速度环 + 转向环
+ *
+ * 迁移路径：
+ *   ST_IDLE    --收到 "1"--> StartErect() ------------> ST_ERECT
+ *   ST_ERECT   --|Angle| <= ERECT_DONE_ANG---------->  ST_BALANCE
+ *   ST_ERECT   --超过 ERECT_TIMEOUT_MS(3s)---------->  StopCar() -> ST_IDLE
+ *   ST_BALANCE --|Angle| > ERECT_START_ANG---------->  StopCar() -> ST_IDLE
+ *
+ * CarState 是单字节：主循环写、中断读。中断要么看到"旧状态"，要么看到
+ * "新状态已写好"，两种情况都安全，所以不需要临界区保护。 */
+#define ST_IDLE     0u
+#define ST_ERECT    1u
+#define ST_BALANCE  2u
+volatile uint8_t CarState = ST_IDLE;
+uint32_t hcount = 0, Count1 = 0;
+static uint8_t ReviveCount = 0;   // 自动重启次数计数（当前未使用）
+char display_buf[128];
+uint32_t Rx_buf[300];
+
+//#define RX_BUF_SIZE  128
+//char BlueSerial_RxPacket[RX_BUF_SIZE];   // 接收缓存区
+//volatile uint8_t BlueSerial_RxFlag = 0;     // 帧完成标志位
+//static uint8_t RxState = 0;                 // 状态机状态
+//static uint16_t pRxPacket = 0;              // 当前接收数据量
+
+
+int16_t AX, AY, AZ, GX, GY, GZ;
+volatile uint8_t TimerErrorFlag;
+volatile uint16_t TimerCount;
+
+float AngleAcc;
+float AngleGyro;
+float Angle;
+
+/* ================== 偏航角 Yaw：Z 轴陀螺积分 ==================
+ * 没有磁力计，纯积分，误差随时间累积。三个关键点：
+ *
+ * 1) 标度 YAW_LSB_PER_DPS = 16.384
+ *      GYRO_CONFIG = 0x18 -> ±2000°/s -> 32768/2000 = 16.384 LSB/(°/s)
+ *      参考例程用 ±250°/s 的 131，直接照抄会让偏航角差 8 倍。
+ * 2) dt 固定 0.01f，不用 HAL_GetTick() —— 本块就是恒定 10ms 周期，
+ *      用 ms 计数反而引入抖动污染积分。
+ * 3) 全用 float 不用 double：Cortex-M3 无 FPU，double 走软件模拟，约慢 5 倍。
+ *
+ * YAW_BIAS_DPS 是 Z 轴零偏，标定方法：车静止 30s，取屏上 GZ 读数的均值 / 16.384。
+ *      标定值 41.20 LSB / 16.384 = 2.51 °/s
+ *      复测值 39.45 LSB / 16.384 = 2.41 °/s   <- 本值
+ *   两次差 1.67 LSB(≈0.10 °/s)，来自温度与上电状态。所以不要指望写死一个值
+ *   永远准确 —— 真正稳的做法是上电静止时自动标定。
+ *   残余 0.10 °/s 若不处理，就是 6 °/min 的持续漂移。
+ *
+ * YAW_DEADZONE_DPS 就是压这个残余的：
+ *   实测残余 -0.102 °/s 时，无死区漂移 -6.1 °/min；加 0.5 °/s 死区后压到
+ *   0.18 °/min —— 抑制 34 倍。代价是慢速段(|ω|<0.5°/s)被截断不积分：
+ *   一次 90° 慢转会丢 0.03~0.98°（转得越慢丢得越多，正比于慢速段时间）。
+ *   零偏标得越准，死区就能开得越小，这个损失也随之变小。 */
+#define YAW_LSB_PER_DPS   16.384f   /* ±2000°/s 量程：32768/2000 = 16.384 */
+#define GYRO_LSB_PER_DPS  YAW_LSB_PER_DPS  /* 三轴共用灵敏度(±2000°/s)，GX/GZ 屏显换算 */
+#define YAW_BIAS_DPS      2.41f     /* Z 轴零偏(°/s)：静止实测 GZ 均值 39.45 LSB / 16.384 */
+#define YAW_DEADZONE_DPS  0.5f      /* 角速度死区(°/s)：压制静止时的积分漂移 */
+#define YAW_DT            0.01f     /* 积分周期(s)：与 10ms 控制块一致 */
+#define YAW_WRAP          1         /* 1=归算到 ±180°；0=不归算、持续累加 */
+float Yaw = 0.0f;                   /* 偏航角(°)：车头左转为正（取决于模块安装方向） */
+float YawRate = 0.0f;               /* 偏航角速度(°/s)：已扣零偏、已过死区 */
+int16_t LeftPWM, RightPWM;			//左PWM，右PWM
+int16_t AvePWM, DifPWM;				//平均PWM，差分PWM
+int16_t DifPWMTarget = 0;			//转向环目标（差速），预留量
+float DifSpeedFilter = 0.0f;		//转向速度低通滤波值：滤掉左右轮差速的抖动
+#define TURN_FF  20.0f						/* 转向前馈：先把轮子推出电机/静摩擦死区，再由 TurnPID 修正。
+											 * 没有它，|TurnPID.Out| 小的时候轮子根本不转，转向环会"粘住" */
+#define TURN_FB_SIGN  (-1)   /* 转向环反馈符号：+1=正接；-1=反馈取反（左右轮装反/拧线接反时用） */
+/* ---------- 自起立(Self-Erect)参数 ---------- */
+#define ERECT_PWM        100		/* 甩轮PWM(0~100)：起不来找大；太猛会甩过头、电机发热 */
+#define ERECT_START_ANG  55.0f	/* 平衡中 |Angle| 超过此值 -> 判定摔倒，进入自起立 */
+#define ERECT_DONE_ANG   30.0f	/* 前倒方向：|Angle| 收进此窗口 -> 交回平衡环 */
+#define ERECT_DONE_ANG_BACK 45.0f	/* 后倒方向：后侧更难抬，放宽到此角度就交回平衡环 */
+#define ERECT_TIMEOUT_MS 3000	/* 甩轮超过此时间还没起来 -> 停机（路面太滑 / 被挡住） */
+uint16_t ErectTime = 0;			/* 当前 ERECT 已持续(ms)：每 10ms 加一次，同时用于 LED 闪烁 */
+#define ERECT_DIR        (1)		/* 甩轮方向：1=与平衡环同号(默认)；-1=取反(原地转圈/磨轮胎时改 -1) */
+#define ERECT_PULSE_MS   400			/* 断续模式：每个周期通电时长(ms)；0=持续通电(一直甩) */
+#define ERECT_PERIOD_MS  500		/* 断续周期(ms)：通电 400ms + 断电 100ms */
+static uint16_t Count2 = 0;			//转向10ms计数（当前未使用）
+float LeftSpeed, RightSpeed;		//左轮速度，右轮速度（输出轴 转/秒）
+float AveSpeed, DifSpeed;			//平均速度，差分速度
+
+float G = 0.00;						//加速度计角度零点偏置(°)：机械安装倾斜的补偿，可在蓝牙滑块在线调
+
+/* ---------- 三个 PID 结构体：定义时同时给成员赋初值 ----------
+ * 注意 PID_Update() 的两个特性（见 pid.c）：
+ *   1) Ki==0 时积分项被强制清零 —— 所以"先关积分调参"是安全的
+ *   2) 用微分先行：Out 里的微分项作用在 (Actual - Actual1) 上，而不是误差，
+ *      所以改 Target 不会产生微分冲击 */
+PID_t AnglePID =  					//角度环（直立环）：输入 Angle，输出 AvePWM。串级结构的内环
+{
+    .Kp = 16.9,						//比例项权重
+    .Ki = 0.06,						//积分项权重
+    .Kd = 30.4,						//微分项权重
+
+    .OutMax = 80,					//输出限幅上限 -> 最大 PWM 80
+    .OutMin = -80,					//输出限幅下限
+	
+	.OutOffset = 0,					//输出死区补偿：Out>0 时加、Out<0 时减，用来推开电机静摩擦
+	
+	.ErrorIntMax = 600,				//积分限幅上限（抗积分饱和）
+	.ErrorIntMin = -600,			//积分限幅下限
+
+};
+PID_t SpeedPID =  					//速度环：输入 AveSpeed(转/秒)，输出 AnglePID.Target(角度下垂量)
+{
+    .Kp = 2.7,						//比例项权重
+    .Ki = 0.21,						//积分项权重
+    .Kd = 0,						//微分项权重
+
+    .OutMax = 10,					//输出限幅 ±10°：限制直立目标的最大倾斜角
+    .OutMin = -10,					
+	
+	.ErrorIntMax = 150,				//积分限幅上限
+	.ErrorIntMin = -150,			//积分限幅下限
+
+};
+PID_t TurnPID =  					//转向环：输入左右轮差速，输出 DifPWM
+{
+    .Kp = 5.9,						//比例项权重
+    .Ki = 0,						//积分项权重（Ki=0 -> 积分自动清零，纯比例控制）
+    .Kd = 0,						//微分项权重
+
+    .OutMax = 30,					//输出限幅 ±30
+    .OutMin = -30,					
+	
+	.ErrorIntMax = 20,				//积分限幅上限
+	.ErrorIntMin = -20,				//积分限幅下限
+
+};
+
+/* ==========================================================================
+ * PID 状态复位 / 角度重对准
+ *
+ * PID_ResetAll()：把三个 PID 的 Target / Out / 积分 / 误差全部清零，并"预置上次值"
+ *   为当前测量值，防止微分项在复位后的第一拍产生巨大冲击。
+ *   摔倒(StopCar)、急停("0")、起立超时都会经过 StopCar()，所以都会走到这里。
+ *   内部只有赋值，无耗时操作，因此可以从 1ms 中断里安全调用。
+ *
+ * Angle_Realign()：用加速度计把角度重新对准一次（仅静止时有效）。
+ *   互补滤波 Alpha=0.001 的时间常数约 10s，摔倒后靠它自己收敛太慢，
+ *   所以起立前主动重对准一次 —— 取 300ms 加速度计角的平均。
+ *
+ *   ★ 内部是 30 × HAL_Delay(10ms) = 300ms 的阻塞等待，只能放主循环调用，
+ *     绝对不能放进 1ms 的 HAL_TIM_PeriodElapsedCallback。
+ *   ★ 等待期间必须关掉 TIM3 中断：中断里也会读 MPU6050（同一条 I2C），
+ *     两者并发会互相破坏时序。这里只清 DIER 的 UIE 位、不动其他状态，
+ *     结束后按进入前的原状恢复。
+ * ========================================================================== */
+void PID_ResetAll(void)
+{
+    PID_Init(&AnglePID);
+    PID_Init(&SpeedPID);
+    PID_Init(&TurnPID);
+
+    /* 预置"上次值"，防止微分项第一拍冲击 */
+    AnglePID.Actual  = Angle;
+    AnglePID.Actual1 = Angle;
+    AnglePID.Error0  = AnglePID.Target - AnglePID.Actual;
+    AnglePID.Error1  = AnglePID.Error0;
+
+    SpeedPID.Actual  = AveSpeed;
+    SpeedPID.Actual1 = AveSpeed;
+    TurnPID.Actual   = DifSpeed;
+    TurnPID.Actual1  = DifSpeed;
+
+    DifSpeedFilter = DifSpeed;
+    DifPWM         = 0;
+}
+
+void Angle_Realign(void)
+{
+    int32_t  sum = 0;
+    int      k;
+    uint32_t itWasOn;
+
+    /* 阻塞期间要屏蔽 TIM3 中断：中断里也会读 MPU6050(同一条 I2C)，
+     * 两者并发会互相破坏时序。这里只清 DIER 的 UIE 位、不改其他状态，
+     * 结束后按进入前的原状恢复（这样上电初始化和运行中调用都适用）。 */
+    itWasOn = (htim3.Instance->DIER & TIM_IT_UPDATE) ? 1u : 0u;
+    __HAL_TIM_DISABLE_IT(&htim3, TIM_IT_UPDATE);
+
+    for (k = 0; k < 30; k++)              /* 30 x 10ms = 300ms */
+    {
+        MPU6050_GetData(&AX, &AY, &AZ, &GX, &GY, &GZ);
+        sum += (int32_t)(-atan2(AY, AZ) / 3.14159 * 180.0);
+        HAL_Delay(10);
+    }
+
+    Angle = (float)sum / 30.0f + G;       /* 取平均，并叠加机械零点偏置 */
+
+    if (itWasOn)
+    {
+        __HAL_TIM_CLEAR_IT(&htim3, TIM_IT_UPDATE);
+        __HAL_TIM_ENABLE_IT(&htim3, TIM_IT_UPDATE);
+    }
+}
+
+/* ==========================================================================
+ * 状态迁移接口：StartErect() / StopCar()
+ *   StartErect() 只从主循环调用（内部阻塞 300ms 做角度重对准）
+ *   StopCar()    主循环和 10ms 中断都会调用，所以只做赋值 + PID 复位 + GPIO 写，
+ *                这些在中断里都是安全的
+ *   CarState 单字节：中断只会看到"旧状态"或"新状态已写好"，不需要临界区
+ * ========================================================================== */
+void StopCar(void)
+{
+    CarState  = ST_IDLE;
+    ErectTime = 0;
+    PID_ResetAll();               /* 摔倒/急停/超时：把所有环的内部状态一并清干净 */
+    TB6612_setPWM(1, 0);          /* 停机PWM=0：IN1/IN2 同时为低 -> 电机自由停转 */
+    TB6612_setPWM(2, 0);
+}
+
+void StartErect(void)
+{
+    if (CarState != ST_IDLE)
+    {
+        return;                   /* 已在运行就忽略，重复收到 "1" 不会重入 */
+    }
+
+    /* 先重对准角度，再进起立：摔倒后互补滤波要十几秒才收敛，
+     * 不等它就会带着错的初始角度去甩轮。300ms 阻塞，只能主循环调用。 */
+    Angle_Realign();
+
+    PID_ResetAll();
+    ErectTime = 0;
+
+    CarState = ST_ERECT;          /* 最后一步，让中断开始接管 */
+}
+
+static const char *StateStr(void)
+{
+    if (CarState == ST_BALANCE) return "BAL";
+    if (CarState == ST_ERECT)   return "ERECT";
+    return "IDLE";
+}
+
+/* ==========================================================================
+ * TIM3 更新中断：整个系统的唯一时基（1ms）
+ *   tim.c: Prescaler = 72-1, Period = 1000-1  ->  72MHz/72/1000 = 1ms
+ *
+ * 节拍分三层：
+ *   每 1ms   hcount++，并在末尾检查是否摔倒
+ *   每 10ms  读 MPU6050 -> 姿态解算 -> 偏航积分 -> 直立环 / 自起立
+ *   每 50ms  读编码器 -> 算速度 -> 速度环 + 转向环
+ *
+ * 注意：1ms 的本层里只做了 hcount++ 和一次摔倒判断，重活全在 10ms / 50ms
+ * 分支里 —— 这样最坏情况下中断占用也不会顶到 1ms 周期。
+ * ========================================================================== */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim != &htim3)
+    {
+        return;
+    }
+
+    hcount++;
+    __HAL_TIM_CLEAR_IT(&htim3, TIM_IT_UPDATE);
+
+    if (hcount >= 10)                                 /* ===== 10ms 层 ===== */
+    {
+        hcount = 0;
+        MPU6050_GetData(&AX, &AY, &AZ, &GX, &GY, &GZ);   /* 一次 I2C 突发读 14 字节，约 150us */
+        /* 补偿 X 轴零偏：+10 LSB ≈ 0.61°/s，是实测硬件的固定偏置 */
+        GX += 10;
+
+        /* 加速度计角度：atan2 输出弧度，转成角度；G 是机械零点偏置 */
+        AngleAcc = -atan2(AY, AZ) / 3.14159 * 180 + G;
+
+        /* 互补滤波 Alpha=0.001：
+         *   加速度计长期准但不抗振动（对线加速度敏感）
+         *   陀螺积分短期准但会漂
+         *   时间常数 ≈ 1/(Alpha * 100Hz) = 10s，即 10s 内信陀螺，更久信加速度计
+         * 陀螺预测项的减号来自 Angle 的符号约定（-atan2(AY,AZ)），与 GX 正方向相反。
+         * dt 直接写 0.01 而不用变量：本块就是恒定 10ms 周期。 */
+        AngleGyro = Angle - GX / 32768.0 * 2000 * 0.01;
+        float Alpha = 0.001f;
+        Angle = Alpha * AngleAcc + (1 - Alpha) * AngleGyro;
+
+        /* ---------- 偏航角：Z 轴陀螺积分 ----------
+         * 标度、零偏、死区、dt 的取值理由见文件上方 YAW_* 宏定义处的注释。
+         * 与参考例程的两处关键差异：
+         *   1) 量程用 GYRO_CONFIG=0x18(±2000°/s) 的 16.384 LSB/(°/s)，
+         *      参考例程是 0x00(±250°/s) 的 131，照抄会让偏航角差 8 倍
+         *   2) dt 固定 0.01f，不用 HAL_GetTick() 的 1ms 分辨率去凑 */
+        YawRate = GZ / YAW_LSB_PER_DPS - YAW_BIAS_DPS;
+        if (YawRate > -YAW_DEADZONE_DPS && YawRate < YAW_DEADZONE_DPS) YawRate = 0.0f;
+        Yaw += YawRate * YAW_DT;
+#if YAW_WRAP
+        if      (Yaw >  180.0f) Yaw -= 360.0f;
+        else if (Yaw < -180.0f) Yaw += 360.0f;
+#endif
+
+        /* ================= 控制分派：三态互斥 ================= */
+        if (CarState == ST_BALANCE)
+        {
+            /* ---------- 直立（原平衡环）----------
+             * 取负号：AnglePID 的误差定义为 Target-Actual，而轮子正转方向
+             * 与 Angle 的正方向相反，所以输出要反一次才对应"往哪边倒就往哪边追"。 */
+            AnglePID.Actual = Angle;
+            PID_Update(&AnglePID);
+            AvePWM = -AnglePID.Out;
+
+            LeftPWM  = AvePWM + DifPWM / 2;
+            RightPWM = AvePWM - DifPWM / 2;
+
+            if (LeftPWM > 80)        LeftPWM  = 80;
+            else if (LeftPWM < -80)  LeftPWM  = -80;
+            if (RightPWM > 80)       RightPWM = 80;
+            else if (RightPWM < -80) RightPWM = -80;
+
+            TB6612_setPWM(1, LeftPWM);
+            TB6612_setPWM(2, RightPWM);
+        }
+        else if (CarState == ST_ERECT)
+        {
+            /* ---------- 自起立：两轮同向同幅给 PWM，用反作用力矩把车甩到竖直 ----------
+             * 符号与平衡环一致：Angle>0 往前甩，Angle<0 往后甩。
+             * 前后两个方向用不同的"到位角"：后侧更难抬，所以门槛放宽。
+             * 起立过程中不允许转向，只让转向环把差速拉回 0。 */
+            float erectDoneAng = (Angle > 0.0f) ? ERECT_DONE_ANG : ERECT_DONE_ANG_BACK;
+
+            if (fabsf(Angle) <= erectDoneAng)
+            {
+                /* 已进入平衡范围 -> 交回平衡环 */
+                PID_ResetAll();
+                ErectTime = 0;
+                CarState  = ST_BALANCE;
+            }
+            else if (ErectTime < ERECT_TIMEOUT_MS)
+            {
+                int16_t swing = (Angle > 0.0f) ? ERECT_PWM : -ERECT_PWM;
+                if (ERECT_DIR < 0) swing = -swing;      /* 方向不对就取反 */
+
+                if (ERECT_PULSE_MS > 0 && (ErectTime % ERECT_PERIOD_MS) >= ERECT_PULSE_MS)
+                    swing = 0;                          /* 断续(脉冲)模式：断电间隙让车靠惯性继续甩过去 */
+
+                /* 转向环在此也运行，但目标固定为 0，只负责把差速压回 0 */
+                TurnPID.Target = 0.0f;
+                TurnPID.Actual = DifSpeed;
+                PID_Update(&TurnPID);
+                DifPWM = (int16_t)TurnPID.Out;
+
+                LeftPWM  = swing + DifPWM / 2;
+                RightPWM = swing - DifPWM / 2;
+
+                if (LeftPWM > 100)        LeftPWM  = 100;
+                else if (LeftPWM < -100)  LeftPWM  = -100;
+                if (RightPWM > 100)       RightPWM = 100;
+                else if (RightPWM < -100) RightPWM = -100;
+
+                TB6612_setPWM(1, LeftPWM);
+                TB6612_setPWM(2, RightPWM);
+                ErectTime += 10;                        /* 本块每 10ms 跑一次 */
+            }
+            else
+            {
+                /* ---------- 超时：路面太滑/被挡住/轮胎打滑，停车 ----------
+                 * 退回 IDLE，再发一次 "1" 可以重试。 */
+                StopCar();
+            }
+        }
+        else
+        {
+            /* ---------- ST_IDLE（上电默认）：电机断电 ----------
+             * 每 10ms 主动写一次 0，是防御式写法：任何意外的残留 PWM 都会被抹掉 */
+            TB6612_setPWM(1, 0);
+            TB6612_setPWM(2, 0);
+        }
+    }
+
+    Count1 ++;				//计次计数
+
+    if (Count1 >= 50)		/* ===== 50ms 层：速度环 + 转向环 ===== */
+    {
+        Count1 = 0;			//计次清零，用于下次计数
+
+        /* 编码器：每 50ms 读一次增量，读完自动清零计数器
+         *   ReadSpeed() 返回 (short)CNT 的增量，带符号（可正可负）
+         *   44   = 电机转一圈的计数个数
+         *   0.05 = 采样周期 50ms
+         *   30   = 减速比
+         *   -> 结果是"输出轴 转/秒"
+         * 右轮取负号：两个编码器的计数方向相反，这里统一成"前进为正" */
+        LeftSpeed = ReadSpeed(&htim2) / 44.0 / 0.05 / 30;
+        RightSpeed = -ReadSpeed(&htim4) / 44.0 / 0.05 / 30;
+
+        /*信号反转*/
+			AveSpeed = (LeftSpeed + RightSpeed) / 2.0;	
+			DifSpeed = TURN_FB_SIGN * (LeftSpeed - RightSpeed);			
+			
+			/*执行PID主程序*/
+			if (CarState == ST_BALANCE)		/* 只有直立行驶时才跑速度环+转向环 */
+			{
+				/*速度环PID计算*/
+				SpeedPID.Actual = AveSpeed;			
+				PID_Update(&SpeedPID);				//调用封装好的函数，一步完成PID计算和更新
+				AnglePID.Target = SpeedPID.Out;		/* 外环输出当作内环目标：车快了就往前倾一点来减速 */
+				
+				/*转向PID计算*/
+				DifSpeedFilter += 0.5f * (DifSpeed - DifSpeedFilter);	/* 转向速度一阶低通：抑制编码器抖动/打滑毛刺，系数 0.5 可调(0.3 更平滑 / 0.7 更跟手) */
+				TurnPID.Actual = DifSpeedFilter;			
+				PID_Update(&TurnPID);				//调用封装好的函数，一步完成PID计算和更新
+				DifPWM = (int16_t)(TurnPID.Out + TURN_FF * TurnPID.Target);	/* 转向反馈 + 转向前馈 */
+				if (DifPWM > 50) DifPWM = 50; else if (DifPWM < -50) DifPWM = -50;	/* 限幅 ±25/轮：前馈+反馈叠加后容易超出，必须夹住 */				
+
+        }
+
+    }
+
+
+    /* 平衡中倒下超过 ERECT_START_ANG -> StopCar() 停车回 IDLE。
+     * 本判断在 1ms 层执行，但 Angle 是 10ms 更新一次，所以实际响应粒度是 10ms。
+     * StopCar() 内部会做 PID_ResetAll()，所以再发一次 "1" 时 StartErect()
+     * 会重新 Angle_Realign() 重对准一次角度。 */
+    if (CarState == ST_BALANCE && fabsf(Angle) > ERECT_START_ANG)
+    {
+        StopCar();
+    }
+
+
+
+    if (__HAL_TIM_GET_FLAG(&htim3, TIM_IT_UPDATE) != RESET)
+    {
+
+        if (__HAL_TIM_GET_FLAG(&htim3, TIM_IT_UPDATE) == SET)
+        {
+            TimerErrorFlag = 1;  // 中断超时标记：本函数跑完时下一拍中断已经又到了
+                                  // -> 说明这次中断处理超时了，留给调试观察用
+
+            __HAL_TIM_CLEAR_IT(&htim3, TIM_IT_UPDATE);
+        }
+
+        TimerCount = __HAL_TIM_GET_COUNTER(&htim3);
+    }
+}
+
+/* USER CODE END 0 */
+
+/**
+  * @brief  The application entry point.
+  * @retval int
+  */
+int main(void)
+{
+
+  /* USER CODE BEGIN 1 */
+
+  /* USER CODE END 1 */
+
+  /* MCU Configuration--------------------------------------------------------*/
+
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
+
+  /* USER CODE BEGIN Init */
+
+  /* USER CODE END Init */
+
+  /* Configure the system clock */
+  SystemClock_Config();
+
+  /* USER CODE BEGIN SysInit */
+
+  /* USER CODE END SysInit */
+
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_TIM3_Init();
+  MX_TIM1_Init();
+  MX_TIM2_Init();
+  MX_TIM4_Init();
+  MX_USART3_UART_Init();
+  MX_ADC1_Init();
+  /* USER CODE BEGIN 2 */
+    HAL_Delay(200);   // 等 OLED 上电稳定，否则首屏可能显示异常
+    OLED_Init();
+    OLED_Clear();
+
+    MPU6050_Init();
+    Angle_Realign();   /* 上电先用加速度计对准角度(静止时有效)，否则互补滤波要十几秒才收敛，
+                        * 期间发的"1"会让车带着错误的角度去甩轮。此处 TIM3 中断还没开，安全。 */
+    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
+    HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
+    HAL_TIM_Encoder_Start(&htim4, TIM_CHANNEL_ALL);
+    BlueSerial_Init();   // 初始化蓝牙串口接收
+    HAL_TIM_Base_Start(&htim3);
+    uint8_t ID;
+    ID = MPU6050_GetID();   /* 读 WHO_AM_I：0x68 说明 MPU6050 在线。结果当前未使用，
+                             * 需要时可放到 OLED 上看以确认传感器是否应答 */
+    OLED_Update();
+    MX_TIM3_Init();                  /* 重复初始化一次 TIM3（与上面 MX_TIM3_Init() 同款配置），
+                                      * 确保在开中断前寄存器是干净的 */
+    HAL_TIM_Base_Start_IT(&htim3);   /* 1ms update interrupt */
+    PID_Init(&AnglePID);
+    PID_Init(&SpeedPID);
+    PID_Init(&TurnPID);
+
+    CarState = ST_IDLE;          /* 上电默认：电机断电，等蓝牙 "1" 才开始 */
+
+    // 预置角度环误差，抑制微分冲击
+    AnglePID.Actual = Angle;
+    AnglePID.Actual1 = Angle;   //同步预置上次实际值，防止微分项第一拍冲击
+    AnglePID.Error0 = AnglePID.Target - AnglePID.Actual;
+    AnglePID.Error1 = AnglePID.Error0;    
+  /* USER CODE END 2 */
+
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
+    while (1)
+    {
+        int len;
+        uint8_t i;
+        static uint32_t lastSendTime = 0;
+//	TB6612_setPWM(2,100);
+
+        /* 状态指示灯（PC13，低电平点亮）：
+         *   熄灭 = IDLE 待机    闪烁 = ERECT 自起立中    常亮 = BALANCE 直立行驶
+         *   闪烁由 ErectTime/150 决定：每 150ms 翻转一次 */
+        {
+            uint8_t ledOff;
+            if (CarState == ST_BALANCE)     ledOff = 0;
+            else if (CarState == ST_ERECT)  ledOff = (uint8_t)((ErectTime / 150u) & 1u);
+            else                            ledOff = 1;
+            HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, ledOff ? GPIO_PIN_SET : GPIO_PIN_RESET);
+        }
+
+
+        /* ---------- OLED 布局（128x64，OLED_6X8 字体每字符 6 像素宽）----------
+         *   y=0    ST:<状态> <起立计时ms>
+         *   y=8    KP: 角度环 // 速度环 // 转向环
+         *   y=16   KI: 同上
+         *   y=24   KD: 同上
+         *   y=32   T:<角度环目标值>        (x=0,  宽 0..41)
+         *          Yaw:<偏航角 度>         (x=60, 宽 60..125)
+         *   y=40   Angle:<角度环实际值>    G:<角度零点偏置>  (x=70)
+         *   y=48   O:<角度环输出>          S:<右轮转速>      (x=70)
+         *   y=56   GX<X轴角速度°/s>  GZ<Z轴角速度°/s>  S<左轮转速>
+         *          (x=0, 42, 84)
+         *
+         * 字段间距是按 6 像素/字符算好的，互不重叠。
+         * ★ OLED.c 写显存用的是 |= 而不是 =，字段一旦重叠会按"按位或"叠出花屏，
+         *   而不是互相覆盖 —— 所以改布局时必须自己算宽度。 */
+        OLED_Clear();
+//        OLED_Printf(0, 0, OLED_6X8, "ST:%s %d", StateStr(), (int)ErectTime);   /* 状态 + 起立计时(ms) */
+//        OLED_Printf(0, 8, OLED_6X8, "KP:%05.2f//%05.2f//%05.2f ", AnglePID.Kp, SpeedPID.Kp, TurnPID.Kp);		//角度环Kp
+//        OLED_Printf(0, 16, OLED_6X8, "KI:%05.2f//%05.2f//%05.2f", AnglePID.Ki, SpeedPID.Ki, TurnPID.Ki);		//角度环Ki
+//        OLED_Printf(0, 24, OLED_6X8, "KD:%05.2f//%05.2f//%05.2f", AnglePID.Kd, SpeedPID.Kd, TurnPID.Kd);		//角度环Kd
+        OLED_Printf(0, 32, OLED_6X8, "T:%+05.1f", AnglePID.Target);	//角度环目标值
+        OLED_Printf(60, 32, OLED_6X8, "Yaw:%+07.2f", Yaw);			//偏航角(°)：车头左转为正
+        OLED_Printf(0, 40, OLED_6X8, "Angle:%+05.1f", Angle);			//角度环实际值
+        OLED_Printf(0, 48, OLED_6X8, "O:%+05.0f", AnglePID.Out);	//角度环输出值
+//        OLED_Printf(0, 56, OLED_6X8, "GX%+05.1f", GX / GYRO_LSB_PER_DPS);  /* X轴角速度(°/s)：静止应为 0 */
+//        OLED_Printf(42, 56, OLED_6X8, "GZ%+05.1f", GZ / GYRO_LSB_PER_DPS);  /* Z轴角速度(°/s)：静止读数应接近 YAW_BIAS_DPS */
+//        OLED_Printf(70, 40, OLED_6X8, "G:%+02.2f", G);
+        OLED_Printf(70, 48, OLED_6X8, "S:%+02.2f", RightSpeed);
+        OLED_Printf(84, 56, OLED_6X8, "S%+02.2f", LeftSpeed);
+        OLED_Update();
+
+
+        /* ---- 蓝牙命令：两种格式都支持 ----
+         *   裸字符（手机串口助手直接敲）：'1' = 起立   '0' = 急停
+         *   [包]（App/上位机）：[1] / [0] 含义相同，另外还有滑块和摇杆 */
+        if (BlueSerial_CmdFlag)
+        {
+            char cmd = BlueSerial_CmdChar;
+            BlueSerial_CmdFlag = 0;
+            if      (cmd == '1') { StartErect(); }
+            else if (cmd == '0') { StopCar(); }
+        }
+
+        /* 遍历两个接收缓冲槽，逐个处理已收完的 [包] */
+        for (i = 0; i < 2; i++)
+        {
+            if (BlueSerial_RxFlag[i] == 1)
+            {
+                char *Tag = strtok(BlueSerial_RxPacket[i], ",");	//取第1段，作为标签Tag
+
+                if (Tag != NULL)
+                {
+                    if (strcmp(Tag, "1") == 0)                  /* 收到 [1] -> 起立 */
+                    {
+                        StartErect();
+                    }
+                    else if (strcmp(Tag, "0") == 0)             /* 收到 [0] -> 急停 */
+                    {
+                        StopCar();
+                    }
+                    else if (strcmp(Tag, "key") == 0)           /* [key,名称,动作]：按键帧 */
+                    {
+                        char *Name = strtok(NULL, ",");			//取第2段，作为按键名称
+                        char *Action = strtok(NULL, ",");		//取第3段，作为按键动作
+
+                        /*此处执行按键动作，目前按键暂时没有用到*/
+                    }
+                    else if (strcmp(Tag, "slider") == 0)	//[slider,名称,值]：滑块帧，用于在线调参
+                    {
+                        char *Name = strtok(NULL, ",");			//取第2段，作为滑块名称
+                        char *Value = strtok(NULL, ",");		//取第3段，作为滑块值
+
+                        /*执行滑块操作：把上位机传来的值写进对应的 PID 参数*/
+                        if (strcmp(Name, "AngleKp") == 0)	//滑块名称为AngleKp
+                        {
+                            AnglePID.Kp = atof(Value);		//把滑块值赋给角度环Kp
+                        }
+                        else if (strcmp(Name, "AngleKi") == 0)	//滑块名称为AngleKi
+                        {
+                            AnglePID.Ki = atof(Value);		//把滑块值赋给角度环Ki
+                        }
+                        else if (strcmp(Name, "AngleKd") == 0)	//滑块名称为AngleKd
+                        {
+                            AnglePID.Kd = atof(Value);		//把滑块值赋给角度环Kd
+                        }
+                        else if (strcmp(Name, "G") == 0)	//滑块名称为G：角度零点偏置
+                        {
+                            G = atof(Value);		//把滑块值赋给角度零点偏置
+                        }
+                        else if (strcmp(Name, "SpeedKp") == 0)		//滑块名称为SpeedKp
+                        {
+                            SpeedPID.Kp = atof(Value);				//把滑块值赋给速度环Kp
+                        }
+                        else if (strcmp(Name, "SpeedKi") == 0)		//滑块名称为SpeedKi
+                        {
+                            SpeedPID.Ki = atof(Value);				//把滑块值赋给速度环Ki
+                        }
+                        else if (strcmp(Name, "SpeedKd") == 0)		//滑块名称为SpeedKd
+                        {
+                            SpeedPID.Kd = atof(Value);				//把滑块值赋给速度环Kd
+                        }
+                        else if (strcmp(Name, "TurnKp") == 0)		//滑块名称为TurnKp
+                        {
+                            TurnPID.Kp = atof(Value);				//把滑块值赋给转向环Kp
+                        }
+                        else if (strcmp(Name, "TurnKi") == 0)		//滑块名称为TurnKi
+                        {
+                            TurnPID.Ki = atof(Value);				//把滑块值赋给转向环Ki
+                        }
+                        else if (strcmp(Name, "TurnKd") == 0)		//滑块名称为TurnKd
+                        {
+                            TurnPID.Kd = atof(Value);				//把滑块值赋给转向环Kd
+                        }
+
+                    }
+                    else if (strcmp(Tag, "joystick") == 0)		//[joystick,LH,LV,RH,RV]：摇杆帧
+                    {
+                        int8_t LH = atoi(strtok(NULL, ","));		//取第2段，作为摇杆值LH
+                        int8_t LV = atoi(strtok(NULL, ","));		//取第3段，作为摇杆值LV
+                        int8_t RH = atoi(strtok(NULL, ","));		//取第4段，作为摇杆值RH
+                        int8_t RV = atoi(strtok(NULL, ","));		//取第5段，作为摇杆值RV
+
+                        /*执行摇杆操作*/
+                        /* 摇杆回中死区：消除 ±5 以内的零漂 */
+                        if (LV > -5 && LV < 5) { LV = 0; }
+                        if (RH > -5 && RH < 5) { RH = 0; }
+
+                        SpeedPID.Target = LV / 50.0;		
+                        TurnPID.Target   = RH / 50.0;				//摇杆值RH正负，控制转向目标值，RH>0=右转，RH<0=左转
+                        if (TurnPID.Target != 0.0f && LV == 0)
+                            SpeedPID.Target = 0.20f;		/* 只转向不给速度时，补一点前进速度，否则原地打转(0.15~0.4 可调) */
+
+                    }
+                }
+
+                BlueSerial_RxFlag[i] = 0;				//处理完成后标志位清0，以便接收下一帧数据
+            }
+        }
+
+        /* 上位机波形输出：每轮主循环发一帧，目前是 GZ 和 Yaw 两路
+         *   主循环周期约 44.6ms —— 几乎全花在 OLED_Update() 的软件 I2C 上
+         *   ★ USART3 当前是 9600 波特，这一帧约 20 字节要 ~21ms，
+         *     已经占掉主循环一半时间。要看更密的波形，先把波特率提到 115200 */
+        len = sprintf(display_buf, "[plot,%d,%.2f]",GZ,Yaw);//TurnPID.Target,DifSpeed,DifPWM,%d
+        HAL_UART_Transmit(&huart3, (uint8_t *)display_buf, (uint16_t)len, 100);
+    }
+
+    /* USER CODE END WHILE */
+
+    /* USER CODE BEGIN 3 */
+
+  /* USER CODE END 3 */
+}
+
+/**
+  * @brief System Clock Configuration
+  * @retval None
+  */
+void SystemClock_Config(void)
+{
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
+
+  /** Initializes the RCC Oscillators according to the specified parameters
+  * in the RCC_OscInitTypeDef structure.
+  */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.HSEPredivValue = RCC_HSE_PREDIV_DIV1;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL9;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Initializes the CPU, AHB and APB buses clocks
+  */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* ADC 时钟：PCLK2=72MHz 经 6 分频 = 12MHz（ADC 上限 14MHz）
+   * 采样时间 1.5 周期 + 转换 12.5 周期 = 14 周期 ≈ 1.17us/次
+   * 这套配置是给 CCD 线阵（TSL1401 的 AO 输出）用的 */
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
+  PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV6;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+/* USER CODE BEGIN 4 */
+
+/* USER CODE END 4 */
+
+/**
+  * @brief  This function is executed in case of error occurrence.
+  * @retval None
+  */
+void Error_Handler(void)
+{
+  /* USER CODE BEGIN Error_Handler_Debug */
+    /* User can add his own implementation to report the HAL error return state */
+    __disable_irq();
+
+    while (1)
+    {
+    }
+
+  /* USER CODE END Error_Handler_Debug */
+}
+#ifdef USE_FULL_ASSERT
+/**
+  * @brief  Reports the name of the source file and the source line number
+  *         where the assert_param error has occurred.
+  * @param  file: pointer to the source file name
+  * @param  line: assert_param error line source number
+  * @retval None
+  */
+void assert_failed(uint8_t *file, uint32_t line)
+{
+  /* USER CODE BEGIN 6 */
+    /* User can add his own implementation to report the file name and line number,
+       ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  /* USER CODE END 6 */
+}
+#endif /* USE_FULL_ASSERT */

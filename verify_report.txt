@@ -1,0 +1,63 @@
+############ PER-FILE VERIFICATION ############
+
+Core\Inc\OLED.h            2555    -> 2464    bytes  U+FFFD=0  backslashTrail=0  OK: valid GBK (ANSI)
+Core\Inc\OLED_Data.h       1066    -> 938     bytes  U+FFFD=0  backslashTrail=0  OK: valid GBK (ANSI)
+Core\Inc\OLED_Font.h       9173    -> 9162    bytes  U+FFFD=0  backslashTrail=0  OK: valid GBK (ANSI)
+Core\Inc\pid.h             772     -> 666     bytes  U+FFFD=0  backslashTrail=0  OK: valid GBK (ANSI)
+Core\Src\main.c            26788   -> 25777   bytes  U+FFFD=0  backslashTrail=0  OK: valid GBK (ANSI)
+Core\Src\MPU6050.c         4021    -> 3737    bytes  U+FFFD=0  backslashTrail=0  OK: valid GBK (ANSI)
+Core\Src\pid.c             2487    -> 2060    bytes  U+FFFD=0  backslashTrail=0  OK: valid GBK (ANSI)
+Core\Src\TB6612.c          2013    -> 1971    bytes  U+FFFD=0  backslashTrail=0  OK: valid GBK (ANSI)
+Core\Src\OLED.c            52615   -> 44653   bytes  U+FFFD=0  backslashTrail=0  OK: valid GBK (ANSI)
+Core\Src\OLED_Data.c       16168   -> 15919   bytes  U+FFFD=0  backslashTrail=0  OK: valid GBK (ANSI)
+
+############ THE 48 REPAIRED LINES (decoded as GBK) ############
+
+  89| //char BlueSerial_RxPacket[RX_BUF_SIZE];   // 接收缓冲区
+  90| //volatile uint8_t BlueSerial_RxFlag = 0;     // 帧完成标志位
+  92| //static uint16_t pRxPacket = 0;              // 当前缓冲区索引
+ 105| float DifSpeedFilter = 0.0f;		//转向速度滤波值
+ 107| /* ---------- 自起立(Self-Erect)参数 ---------- */
+ 110| #define ERECT_DONE_ANG   30.0f	/* 甩回到此角度以内 → 交回平衡环 */
+ 112| #define ERECT_TIMEOUT_MS 3000	/* 连续甩超过这个时间还没起来 → 停机保护(轮子离地/被卡住) */
+ 113| uint16_t ErectTime = 0;			/* 自起立计时(ms) */
+ 114| #define ERECT_DIR        (1)		/* 甩轮方向：1=与平衡环同向(默认)；-1=反向(原地转圈/磨地起不来时试 -1) */
+ 117| static uint16_t Count2 = 0;			//转向环10ms计数
+ 123| /*定义PID结构体变量*/
+ 124| PID_t AnglePID =  					//角度环PID结构体变量，定义的时候同时给部分成员赋初值
+ 126| .Kp = 16.9,						//比例项权重
+ 127| .Ki = 0.06,						//积分项权重
+ 128| .Kd = 30.4,						//微分项权重
+ 139| PID_t SpeedPID =  					//角度环PID结构体变量，定义的时候同时给部分成员赋初值
+ 141| .Kp = 2.7,						//比例项权重
+ 142| .Ki = 0.21,						//积分项权重
+ 143| .Kd = 0,						//微分项权重
+ 152| PID_t TurnPID =  					//转向环PID结构体变量，定义的时候同时给部分成员赋初值
+ 154| .Kp = 5.9,						//比例项权重
+ 155| .Ki = 0,						//积分项权重
+ 156| .Kd = 0,						//微分项权重
+ 233| /* 陀螺仪Y轴零漂，按实际硬件调整 */
+ 336| if (Count1 >= 50)		//如果计次50次，则if成立，即if每隔50ms进一次
+ 338| Count1 = 0;			//计次清零，便于下次计数
+ 342| /*编码器磁铁旋转一圈，计次增量为44，编码器读取间隔是50ms（0.05s）*/
+ 343| /*因此磁铁旋转速度 = 计次增量 / 44 / 0.05，单位是转每秒*/
+ 349| /*信号量转换*/
+ 358| PID_Update(&SpeedPID);				//调用封装好的函数，一步完成PID计算和更新
+ 362| DifSpeedFilter += 0.5f * (DifSpeed - DifSpeedFilter);	/* 转向速度一阶低通：抑制编码器噪声/抖动，系数 0.5 可调(0.3更平滑/0.7更跟随) */
+ 364| PID_Update(&TurnPID);				//调用封装好的函数，一步完成PID计算和更新
+ 365| DifPWM = (int16_t)(TurnPID.Out + TURN_FF * TurnPID.Target);	/* 转向环输出 + 死区前馈 */
+ 432| HAL_Delay(200);   // 等待 OLED 上电稳定，避免冷启动不显示
+ 437| /* 上电用加速度计把倾角对准(静止时可信)：否则陀螺积分要十几秒才收敛，躺倒上电会误判 */
+ 451| BlueSerial_Init();   // 初始化蓝牙串口接收
+ 464| // 预置角度环误差，避免微分项冲击
+ 466| AnglePID.Actual1 = Angle;   //同样预置上次实际值，防止微分项第一次冲击
+ 538| /*此处可执行按键操作，目前程序暂时没用到按键*/
+ 543| char *Value = strtok(NULL, ",");		//提取数据3，定义为滑杆名称
+ 596| /* 摇杆死区，避免中位抖动 */
+ 609| BlueSerial_RxFlag[i] = 0;				//处理完成后，标志位置0，允许接收下一个数据包
+  91| //static uint8_t RxState = 0;                 // 状态机状态
+ 130| .OutMax = 80,					//输出限幅的最大值
+ 131| .OutMin = -80,					//输出限幅的最小值
+ 496| OLED_Printf(0, 32, OLED_6X8, "T:%+05.1f", AnglePID.Target);	//角度环目标值
+ 497| OLED_Printf(0, 40, OLED_6X8, "Angle:%+05.1f", Angle);			//角度环实际值
+ 498| OLED_Printf(0, 48, OLED_6X8, "O:%+05.0f", AnglePID.Out);	//角度环输出值

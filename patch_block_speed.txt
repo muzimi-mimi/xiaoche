@@ -1,0 +1,10 @@
+/* ---------- 循迹前进速度：没线时归零 -> 原地直立
+ * 摇杆那一支只在 !TrackMode 时写速度，循迹时前进速度统一由这里给
+ * 直角转弯期间用 CORNER_SPEED 而不是 0：车一边转一边往前走，不会停在直角点上；
+ * 转完进 SETTLE 再按下面这条算(这时 CornerState 仍是 SETTLE，也还是 CORNER_SPEED)。
+ * 丢线时把 SpeedPID.Target 拉 0：速度环回零、AnglePID.Target 也跟着回零，
+ * 只剩 DifPWM 在转 -> 原地保持平衡
+ * 最长容忍 TRACK_LOST_MAX(25 帧 x 40ms = 1s)，超过才认为 CCD 真丢了 */
+				if (TrackMode)
+					SpeedPID.Target = (CornerState != CORNER_LINE) ? CORNER_SPEED
+					                : ((TrackLostCnt >= TRACK_LOST_MAX) ? 0.0f : TRACK_SPEED);

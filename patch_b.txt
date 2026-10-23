@@ -1,0 +1,11 @@
+        /* ---- PA5 用户按键：启动 / 停止 切换 ----
+         * 中断只置标志，这里消费（原因见 HAL_GPIO_EXTI_Callback 上方注释）。
+         *   IDLE            -> StartErect()  甩轮起立
+         *   ERECT / BALANCE -> StopCar()     停车
+         * 走的是和蓝牙 '1' / '0' 完全相同的两个函数，两种操作可以混用。 */
+        if (KeyFlag)
+        {
+            KeyFlag = 0;
+            if (CarState == ST_IDLE) StartErect();
+            else                     StopCar();
+        }

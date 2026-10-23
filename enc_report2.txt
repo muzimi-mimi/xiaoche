@@ -1,0 +1,186 @@
+================================================================
+FILE : Core\Inc\OLED.h
+LINES: ascii=50  cleanUTF8=13  CORRUPTED-UTF8=0  gbk=0
+CORRUPT BYTE COUNT: 0
+
+
+================================================================
+FILE : Core\Inc\OLED_Data.h
+LINES: ascii=27  cleanUTF8=15  CORRUPTED-UTF8=0  gbk=0
+CORRUPT BYTE COUNT: 0
+
+
+================================================================
+FILE : Core\Inc\OLED_Font.h
+LINES: ascii=292  cleanUTF8=1  CORRUPTED-UTF8=0  gbk=0
+CORRUPT BYTE COUNT: 0
+
+
+================================================================
+FILE : Core\Inc\PID.h
+LINES: ascii=14  cleanUTF8=16  CORRUPTED-UTF8=0  gbk=0
+CORRUPT BYTE COUNT: 0
+
+
+================================================================
+FILE : Core\Src\main.c
+LINES: ascii=528  cleanUTF8=56  CORRUPTED-UTF8=42  gbk=73
+CORRUPT BYTE COUNT: 56
+
+---- corrupted UTF-8 lines (42) ----
+  89| corrupt=1 | //char BlueSerial_RxPacket[RX_BUF_SIZE];   // 接收缓冲[?]?
+  90| corrupt=1 | //volatile uint8_t BlueSerial_RxFlag = 0;     // 帧完成标[?]?
+  92| corrupt=1 | //static uint16_t pRxPacket = 0;              // 当前缓冲区索[?]?
+ 105| corrupt=1 | float DifSpeedFilter = 0.0f;		//转向速度滤波[?]
+ 107| corrupt=1 | /* ---------- 自起[?](Self-Erect)参数 ---------- */
+ 110| corrupt=2 | #define ERECT_DONE_ANG   30.0f	/* 甩回到此角度以内 [?] 交回平衡[?] */
+ 112| corrupt=3 | #define ERECT_TIMEOUT_MS 3000	/* 连续甩超过这个时间还没起[?] [?] 停机保护(轮子离地/被卡[?]) */
+ 113| corrupt=1 | uint16_t ErectTime = 0;			/* 自起立计[?](ms) */
+ 114| corrupt=3 | #define ERECT_DIR        (1)		/* 甩轮方向[?]1=与平衡环同向(默认)[?]-1=反向(原地转圈/磨地起不来时[?] -1) */
+ 117| corrupt=1 | static uint16_t Count2 = 0;			//转向[?]10ms计数
+ 123| corrupt=1 | /*定义PID结构体变[?]?*/
+ 124| corrupt=1 | PID_t AnglePID =  					//角度环PID结构体变量，定义的时候同时给部分成员赋初[?]?
+ 126| corrupt=1 | .Kp = 16.9,						//比例项权[?]?
+ 127| corrupt=1 | .Ki = 0.06,						//积分项权[?]?
+ 128| corrupt=1 | .Kd = 30.4,						//微分项权[?]?
+ 139| corrupt=1 | PID_t SpeedPID =  					//角度环PID结构体变量，定义的时候同时给部分成员赋初[?]
+ 141| corrupt=1 | .Kp = 2.7,						//比例项权[?]
+ 142| corrupt=1 | .Ki = 0.21,						//积分项权[?]
+ 143| corrupt=1 | .Kd = 0,						//微分项权[?]
+ 152| corrupt=1 | PID_t TurnPID =  					//转向环PID结构体变量，定义的时候同时给部分成员赋初[?]
+ 154| corrupt=1 | .Kp = 5.9,						//比例项权[?]
+ 155| corrupt=1 | .Ki = 0,						//积分项权[?]
+ 156| corrupt=1 | .Kd = 0,						//微分项权[?]
+ 233| corrupt=2 | /* [?]螺仪Y轴零漂，按实际硬件调[?] */
+ 336| corrupt=1 | if (Count1 >= 50)		//如果计次50次，则if成立，即if每隔50ms进一[?]
+ 338| corrupt=1 | Count1 = 0;			//计次清零，便于下次计[?]
+ 342| corrupt=4 | /*编码器磁铁旋转一圈，计次增量[?]44，编码器读取间隔[?]50ms[?]0.05s[?]*/
+ 343| corrupt=1 | /*因此磁铁旋转速度 = 计次增量 / 44 / 0.05，单位是转每[?]*/
+ 349| corrupt=1 | /*信号量转[?]*/
+ 358| corrupt=1 | PID_Update(&SpeedPID);				//调用封装好的函数，一步完成PID计算和更[?]
+ 362| corrupt=5 | DifSpeedFilter += 0.5f * (DifSpeed - DifSpeedFilter);	/* 转向速度[?]阶低通：抑制编码器噪[?]/抖动，系[?] 0.5 可调(0.3更平[?]/0.7更跟[?]) */
+ 364| corrupt=1 | PID_Update(&TurnPID);				//调用封装好的函数，一步完成PID计算和更[?]
+ 365| corrupt=1 | DifPWM = (int16_t)(TurnPID.Out + TURN_FF * TurnPID.Target);	/* 转向环输[?] + 死区前馈 */
+ 432| corrupt=1 | HAL_Delay(200);   // 等待 OLED 上电稳定，避免冷启动不显[?]
+ 437| corrupt=1 | /* 上电用加速度计把倾角对准(静止时可[?])：否则陀螺积分要十几秒才收敛，躺倒上电会误判 */
+ 451| corrupt=1 | BlueSerial_Init();   // 初始化蓝牙串口接[?]
+ 464| corrupt=1 | // 预置角度环误差，避免微分项冲[?]
+ 466| corrupt=2 | AnglePID.Actual1 = Angle;   //同样预置上次实际值，防止微分项第[?]次冲[?]
+ 538| corrupt=1 | /*此处可执行按键操作，目前程序暂时没用到按[?]?*/
+ 543| corrupt=1 | char *Value = strtok(NULL, ",");		//提取数据3，定义为滑杆[?]?
+ 596| corrupt=1 | /* 摇杆死区，避免中位抖[?] */
+ 609| corrupt=1 | BlueSerial_RxFlag[i] = 0;				//处理完成后，标志位置0，允许接收下[?]?个数据包
+
+
+================================================================
+FILE : Core\Src\MPU6050.c
+LINES: ascii=99  cleanUTF8=25  CORRUPTED-UTF8=0  gbk=0
+CORRUPT BYTE COUNT: 0
+
+
+================================================================
+FILE : Core\Src\pid.c
+LINES: ascii=32  cleanUTF8=33  CORRUPTED-UTF8=0  gbk=0
+CORRUPT BYTE COUNT: 0
+
+
+================================================================
+FILE : Core\Src\TB6612.c
+LINES: ascii=56  cleanUTF8=6  CORRUPTED-UTF8=0  gbk=0
+CORRUPT BYTE COUNT: 0
+
+
+================================================================
+FILE : Core\Src\OLED.c
+LINES: ascii=871  cleanUTF8=601  CORRUPTED-UTF8=0  gbk=0
+CORRUPT BYTE COUNT: 0
+
+
+================================================================
+FILE : Core\Src\OLED_Data.c
+LINES: ascii=371  cleanUTF8=19  CORRUPTED-UTF8=0  gbk=0
+CORRUPT BYTE COUNT: 0
+
+
+================================================================
+FILE : Core\Src\_bak_oled_20261010\OLED.c
+LINES: ascii=879  cleanUTF8=601  CORRUPTED-UTF8=0  gbk=0
+CORRUPT BYTE COUNT: 0
+
+
+================================================================
+FILE : Core\Src\_bak_oled_20261010\OLED_Data.c
+LINES: ascii=365  cleanUTF8=25  CORRUPTED-UTF8=0  gbk=0
+CORRUPT BYTE COUNT: 0
+
+
+================================================================
+FILE : _bak_sm_20261012_230516\Core\Src\main.c
+LINES: ascii=444  cleanUTF8=63  CORRUPTED-UTF8=61  gbk=37
+CORRUPT BYTE COUNT: 79
+
+---- corrupted UTF-8 lines (61) ----
+  80| corrupt=1 | //char BlueSerial_RxPacket[RX_BUF_SIZE];   // 接收缓冲[?]?
+  81| corrupt=1 | //volatile uint8_t BlueSerial_RxFlag = 0;     // 帧完成标[?]?
+  83| corrupt=1 | //static uint16_t pRxPacket = 0;              // 当前缓冲区索[?]?
+  96| corrupt=1 | float DifSpeedFilter = 0.0f;		//转向速度滤波[?]
+  98| corrupt=1 | /* ---------- 自起[?](Self-Erect)参数 ---------- */
+ 101| corrupt=2 | #define ERECT_DONE_ANG   30.0f	/* 甩回到此角度以内 [?] 交回平衡[?] */
+ 103| corrupt=3 | #define ERECT_TIMEOUT_MS 2000	/* 连续甩超过这个时间还没起[?] [?] 停机保护(轮子离地/被卡[?]) */
+ 104| corrupt=1 | uint16_t ErectTime = 0;			/* 自起立计[?](ms) */
+ 105| corrupt=3 | #define ERECT_DIR        (1)		/* 甩轮方向[?]1=与平衡环同向(默认)[?]-1=反向(原地转圈/磨地起不来时[?] -1) */
+ 108| corrupt=1 | static uint16_t Count2 = 0;			//转向[?]10ms计数
+ 114| corrupt=1 | /*定义PID结构体变[?]?*/
+ 115| corrupt=1 | PID_t AnglePID =  					//角度环PID结构体变量，定义的时候同时给部分成员赋初[?]?
+ 117| corrupt=1 | .Kp = 16.9,						//比例项权[?]?
+ 118| corrupt=1 | .Ki = 0.06,						//积分项权[?]?
+ 119| corrupt=1 | .Kd = 30.4,						//微分项权[?]?
+ 130| corrupt=1 | PID_t SpeedPID =  					//角度环PID结构体变量，定义的时候同时给部分成员赋初[?]
+ 132| corrupt=1 | .Kp = 2.6,						//比例项权[?]
+ 133| corrupt=1 | .Ki = 0.21,						//积分项权[?]
+ 134| corrupt=1 | .Kd = 0,						//微分项权[?]
+ 143| corrupt=1 | PID_t TurnPID =  					//转向环PID结构体变量，定义的时候同时给部分成员赋初[?]
+ 145| corrupt=1 | .Kp = 5.9,						//比例项权[?]
+ 146| corrupt=1 | .Ki = 0,						//积分项权[?]
+ 147| corrupt=1 | .Kd = 0,						//微分项权[?]
+ 171| corrupt=2 | /* [?]螺仪Y轴零漂，按实际硬件调[?] */
+ 182| corrupt=1 | if (runflag)					//RunFlag[?]0时，启动PID程序
+ 186| corrupt=1 | PID_Update(&AnglePID);		//调用封装好的函数，一步完成PID计算和更[?]
+ 187| corrupt=1 | AvePWM = -AnglePID.Out;		//角度环的输出值给到电机平均PWM，用于控制前后行[?]
+ 189| corrupt=1 | /*控制量转[?]*/
+ 204| corrupt=1 | /*PWM输出给电[?]*/
+ 205| corrupt=1 | TB6612_setPWM(1, LeftPWM);		//LeftPWM输出给左轮电[?]
+ 206| corrupt=1 | TB6612_setPWM(2, RightPWM);		//RightPWM输出给右轮电[?]
+ 214| corrupt=1 | //            /* ===== 自起[?] Self-Erect =====
+ 221| corrupt=2 | //                if (ERECT_DIR < 0) swing = -swing;		/* 方向[?]键取[?] */
+ 223| corrupt=1 | //                    swing = 0;							/* 脉冲([?])模式：到点断电，靠惯性甩上去 */
+ 233| corrupt=2 | //                ErectTime += 10;				/* 本段[?]10ms进一[?] */
+ 242| corrupt=1 | //                AnglePID.Actual1 = Angle;		/* 防微分项第一次冲[?] */
+ 251| corrupt=2 | //                /* 超时仍起不来(轮子离地/打滑/被卡[?])：停机保护电[?] */
+ 261| corrupt=1 | if (Count1 >= 50)		//如果计次50次，则if成立，即if每隔50ms进一[?]
+ 263| corrupt=1 | Count1 = 0;			//计次清零，便于下次计[?]
+ 267| corrupt=4 | /*编码器磁铁旋转一圈，计次增量[?]44，编码器读取间隔[?]50ms[?]0.05s[?]*/
+ 268| corrupt=1 | /*因此磁铁旋转速度 = 计次增量 / 44 / 0.05，单位是转每[?]*/
+ 274| corrupt=1 | /*信号量转[?]*/
+ 279| corrupt=1 | if (runflag)					//RunFlag[?]0时，启动PID程序
+ 283| corrupt=1 | PID_Update(&SpeedPID);				//调用封装好的函数，一步完成PID计算和更[?]
+ 287| corrupt=5 | DifSpeedFilter += 0.5f * (DifSpeed - DifSpeedFilter);	/* 转向速度[?]阶低通：抑制编码器噪[?]/抖动，系[?] 0.5 可调(0.3更平[?]/0.7更跟[?]) */
+ 289| corrupt=1 | PID_Update(&TurnPID);				//调用封装好的函数，一步完成PID计算和更[?]
+ 290| corrupt=1 | DifPWM = (int16_t)(TurnPID.Out + TURN_FF * TurnPID.Target);	/* 转向环输[?] + 死区前馈 */
+ 298| corrupt=2 | /* 倾角保护：平衡中倒出 ERECT_START_ANG [?] 交给自起立流程接[?] */
+ 358| corrupt=1 | HAL_Delay(200);   // 等待 OLED 上电稳定，避免冷启动不显[?]
+ 363| corrupt=1 | /* 上电用加速度计把倾角对准(静止时可[?])：否则陀螺积分要十几秒才收敛，躺倒上电会误判 */
+ 377| corrupt=1 | BlueSerial_Init();   // 初始化蓝牙串口接[?]
+ 390| corrupt=1 | // 预置角度环误差，避免微分项冲[?]
+ 392| corrupt=2 | AnglePID.Actual1 = Angle;   //同样预置上次实际值，防止微分项第[?]次冲[?]
+ 408| corrupt=1 | if (runflag == 0)		//如果RunFlag[?]0
+ 410| corrupt=1 | PID_Init(&AnglePID);//启动程序时给PID初始化，清除之前可能遗留的参[?]
+ 412| corrupt=1 | //				runflag= 1;		//则RunFlag[?]1
+ 417| corrupt=1 | OLED_Printf(0, 0, OLED_6X8, "  Angle");						//OLED左侧显示角度环参[?]?
+ 444| corrupt=1 | /*此处可执行按键操作，目前程序暂时没用到按[?]?*/
+ 449| corrupt=1 | char *Value = strtok(NULL, ",");		//提取数据3，定义为滑杆[?]?
+ 502| corrupt=1 | /* 摇杆死区，避免中位抖[?] */
+ 515| corrupt=1 | BlueSerial_RxFlag[i] = 0;				//处理完成后，标志位置0，允许接收下[?]?个数据包
+
+
+GRAND TOTAL CORRUPTED BYTES ACROSS ALL FILES: 135

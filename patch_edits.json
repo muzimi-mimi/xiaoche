@@ -1,0 +1,177 @@
+{
+  "files": [
+    {
+      "path": "D:\\Users\\huang\\Desktop\\keil\\PID\\Core\\Src\\adc.c",
+      "edits": [
+        {
+          "s": 66,
+          "old": [""],
+          "new": [
+            "  /* ---- ADC 自校准（原缺失，本次补上）-------------------------------------",
+            "   * STM32F1 的 ADC 每次上电后必须做一次自校准，否则内部电容组失配会留下固定的",
+            "   * 零点偏移。对 CCD 这种整幅动态范围只有十几级的信号，零点偏移是直接从阈值",
+            "   * 余量里扣掉的东西。",
+            "   * 必须在任何一次转换开始之前做，所以放在 MX_ADC1_Init() 末尾。",
+            "   * 厂商 HAL 版在同一位置有这一句（WHEELTEC 模块测试代码 adc.c:65）。",
+            "   * 校准内部是忙等待（几十个 ADCCLK），不依赖 HAL_GetTick()；此处尚未开任何",
+            "   * 中断，也不会有延时阻塞问题。 */",
+            "  if (HAL_ADCEx_Calibration_Start(&hadc1) != HAL_OK)",
+            "  {",
+            "    Error_Handler();",
+            "  }",
+            "",
+            "  /* ---- 采样时间 1.5 周期 -> 41.5 周期 --------------------------------------",
+            "   * CubeMX 默认 ADC_SAMPLETIME_1CYCLE_5 = 1.5 周期。ADCCLK = PCLK2/6 = 12MHz",
+            "   * （main.c: RCC_ADCPCLK2_DIV6），1.5 周期只有 0.125us 采样窗口，对应 ST 建议",
+            "   * 的源阻抗上限不到 1k ohm，是个边界值。",
+            "   * 改成 41.5 周期（约 4.5us）：",
+            "   *   1) 源阻抗余量放到约 6.7k ohm；",
+            "   *   2) 采样窗拉长 6 倍，AO 上的宽带噪声被平均（白噪声约降 2.4 倍）。CCD 的",
+            "   *      对比度只有十几级，噪声是直接从阈值余量里扣的。",
+            "   * 放在 USER CODE 区，CubeMX 重新生成不会被改回 1.5 周期。",
+            "   * 代价：每像素约 9.5us（原约 5us），一帧读出 0.7ms -> 1.2ms；相对 40ms 曝光",
+            "   * 可以忽略，TIM3 中断预算也够（最坏单拍约 1.5ms / 10ms）。",
+            "   * 厂商取值参考：模块测试代码 Get_Adc() 用 239.5 周期（一帧 2.7ms）；平衡车",
+            "   * 巡线那份用 1.5 周期。这里取中间值，是精度与中断占用的折中。 */",
+            "  sConfig.SamplingTime = ADC_SAMPLETIME_41CYCLES_5;",
+            "  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)",
+            "  {",
+            "    Error_Handler();",
+            "  }"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:\\Users\\huang\\Desktop\\keil\\PID\\Core\\Src\\ccd.c",
+      "edits": [
+        {
+          "s": 379,
+          "old": [
+            "volatile uint16_t CCD_Div = 4;",
+            "                                              /* 注意：100ms 已经是 TSL1401CL 数据手册",
+            "                                              * t_int 推荐范围(0.03375~100ms)的上限，",
+            "                                              * 再往上加是超规格运行。*/",
+            "",
+            "#define CCD_DIV_MIN     1                   /* 10ms  —— 最短曝光 */",
+            "#define CCD_DIV_MAX     60                  /* 600ms —— 最长曝光（极暗环境） */"
+          ],
+          "new": [
+            "/* 当前固定曝光 = 4 x 10ms = 40ms。CCD_AutoExposure() 目前没有任何调用点",
+            " * （只声明在 ccd.h，main.c 里不调），所以这个值就是实际曝光。",
+            " * TSL1401CL 数据手册 t_int 推荐范围 0.03375~100ms。 */",
+            "volatile uint16_t CCD_Div = 4;              /* 4 x 10ms = 40ms */",
+            "",
+            "#define CCD_DIV_MIN     1                   /*  1 x 10ms =  10ms —— 最短曝光 */",
+            "#define CCD_DIV_MAX     10                  /* 10 x 10ms = 100ms —— 手册 t_int 上限。",
+                                             "                                             * 原来写 60（=600ms），是手册上限的 6",
+                                             "                                             * 倍，属于超规格运行。自动曝光没启用",
+                                             "                                             * 时它是死代码，但一旦启用就会一路顶",
+                                             "                                             * 到 600ms 并把图像曝糊，先封住。 */"
+          ]
+        },
+        {
+          "s": 111,
+          "old": ["\tDly_us(TIME_us);            /* 与参考完全一致 */"],
+          "new": ["\tDly_us(CCD_TQT_US);         /* tqt >= 20us：手册 Note 1，不能用 TIME_us */"]
+        },
+        {
+          "s": 30,
+          "old": ["int TIME_us = 2;"],
+          "new": [
+            "int TIME_us = 2;",
+            "",
+            "/* SI 落下后到第一个读时钟之间，必须留够像素电荷转移时间 tqt。",
+            " * TSL1401CL 数据手册 Note 1 原文：",
+            " *   20 us is the pixel charge transfer time (tqt)",
+            " * 原实现这一句写的是 Dly_us(TIME_us) = 2us，比手册少 10 倍 —— 前几个像素",
+            " * 采到的是还没建立好的输出。单独用常量，免得以后调 TIME_us（CLK 快慢）时",
+            " * 又把它一起带下去。 */",
+            "#define CCD_TQT_US   20"
+          ]
+        },
+        {
+          "s": 27,
+          "old": [
+            " * 半周期大约 (TIME_us + GPIO/ADC 开销) us。取 2 -> CLK 约 110kHz，",
+            " * 一帧读出约 0.6ms，剩下的时间都留给积分（曝光）。",
+            " * 参考工程那份慢是因为它的 ADC 采样时间设了 239.5 周期(21us/像素)。 */"
+          ],
+          "new": [
+            " * 半周期 = TIME_us + ADC 转换(41.5 周期约 4.5us) + HAL 开销。取 TIME_us=2 时",
+            " * CLK 约 118kHz，一帧读出约 1.2ms，剩下的时间都留给积分（曝光）。",
+            " * 参考工程那份慢到一帧 2.7ms，是因为它的 ADC 采样时间设了 239.5 周期(21us/像素)。 */"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:\\Users\\huang\\Desktop\\keil\\PID\\Core\\Src\\main.c",
+      "edits": [
+        {
+          "s": 756,
+          "old": [" *   概率 ≈ 0.6ms/(CCD_Div x 10ms) ≈ 1.5%，只影响这一屏画面，下一帧即恢复，"],
+          "new": [" *   概率 ≈ 1.2ms/(CCD_Div x 10ms) ≈ 3%，只影响这一屏画面，下一帧即恢复，"]
+        },
+        {
+          "s": 614,
+          "old": ["                int16_t err = (int16_t)CCD_Zhongzhi - 63;   /* 63 = 128 像素阵列的几何中心 */"],
+          "new": ["                int16_t err = (int16_t)CCD_Zhongzhi - TRACK_CENTER;  /* 定标值，见 TRACK_CENTER */"]
+        },
+        {
+          "s": 577,
+          "old": ["     *   一帧读出 ≈0.6ms（TIME_us=2 -> CLK 约 110kHz），占 10ms 的 6%。"],
+          "new": ["     *   一帧读出 ≈1.2ms（TIME_us=2 + ADC 41.5 周期 -> CLK 约 118kHz），占 10ms 的 12%。"]
+        },
+        {
+          "s": 571,
+          "old": ["     * 和 50ms 层的 DifPWM 都已经算完并写进寄存器了，这 ~0.7ms 的阻塞"],
+          "new": ["     * 和 50ms 层的 DifPWM 都已经算完并写进寄存器了，这 ~1.2ms 的阻塞"]
+        },
+        {
+          "s": 394,
+          "old": [
+            " *   CCD 一帧（仅 1/CCD_Div 拍）  ~700us  -> 按 CCD_Div=4 摊薄约 175us",
+            " *   合计                         ~520us / 10ms ≈ 5.2%",
+            " *   最坏单拍（正好赶上采 CCD）    ~1.0ms = 10%，仍然宽裕。"
+          ],
+          "new": [
+            " *   CCD 一帧（仅 1/CCD_Div 拍）  ~1200us -> 按 CCD_Div=4 摊薄约 300us",
+            " *   合计                         ~520us / 10ms ≈ 5.2%",
+            " *   最坏单拍（正好赶上采 CCD）    ~1.5ms = 15%，仍然宽裕。"
+          ]
+        },
+        {
+          "s": 389,
+          "old": [" *   每 1 拍末  按 CCD_Div 分频采一帧 CCD（约 0.7ms）"],
+          "new": [" *   每 1 拍末  按 CCD_Div 分频采一帧 CCD（约 1.2ms）"]
+        },
+        {
+          "s": 208,
+          "old": ["#define TRACK_LOST_MAX 25       /* 连续丢线多少帧后放弃转向：25 帧 x 40ms = 1s */"],
+          "new": [
+            "#define TRACK_LOST_MAX 25       /* 连续丢线多少帧后放弃转向：25 帧 x 40ms = 1s */",
+            "#define TRACK_CENTER   56       /* 定标值：车沿直线行驶时 CCD_Zhongzhi 的读数。",
+            "                                 * 为什么不是 63.5：阵列几何中心是 pixel 64.5，但镜头",
+            "                                 * 光轴、传感器安装、外壳遮光都有固定偏差。实测把线",
+            "                                 * 摆到视场正中时读到 (45+68)/2 = 56，偏 7 像素",
+            "                                 * （约 6mm/纸面）。用 63 会让车恒定偏在线左侧约 6mm。",
+            "                                 * 定标：车对准线直行，读 OLED 上的 Z 值，填进来。",
+            "                                 * 微调：车稳定偏在线左侧 -> 调小；偏右 -> 调大。 */"
+          ]
+        },
+        {
+          "s": 134,
+          "old": [
+            " *   把 TIM3 放到 10ms 是为了给 CCD 让路：get_CCD() 一帧要 ~0.7ms，",
+            " *   在 1ms 周期下会吃掉 70% 的中断预算并触发 TimerErrorFlag。 */"
+          ],
+          "new": [
+            " *   把 TIM3 放到 10ms 是为了给 CCD 让路：get_CCD() 一帧要 ~1.2ms，",
+            " *   在 1ms 周期下会吃掉 120% 的中断预算并触发 TimerErrorFlag。 */"
+          ]
+        }
+      ]
+    }
+  ]
+}

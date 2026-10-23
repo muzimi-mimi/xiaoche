@@ -1,0 +1,5 @@
+volatile int8_t  CornerDir   = 0;   /* 本次直角的转向：+1 = 右转，-1 = 左转
+                                     * 注意这是"转向"符号，不是"图像哪端发黑"：
+                                     * Target = TRACK_DIR x CornerDir x PIVOT_RATE，
+                                     * TRACK_DIR = -1，所以 +1 -> Target<0 -> 右转
+                                     * 与 TurnPID / 循迹的符号约定完全一致 */

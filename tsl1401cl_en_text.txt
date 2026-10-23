@@ -1,0 +1,983 @@
+
+
+########## PAGE 3 (obj 5) ##########
+[y=31.94] DocumentFeedback
+[y=43.94] Page 2 ams Datasheet
+[y=422.81] SI
+[y=426.81] 1
+[y=436.2] CShift RegisterLK 128-Bit
+[y=440.74] 2
+[y=475.52] Trim
+[y=481.03] HoldQ1 Q2 Q3 Q128
+[y=483.62] Gain
+[y=506.95] Switch Control Logic
+[y=536.33] GND
+[y=542.37] Output 6, 7
+[y=551.01] Sample/Hold/
+[y=560.41] S2
+[y=565.27] +
+[y=574.23] Buer
+[y=576.29] 1 3 AO
+[y=577.91] _
+[y=582.34] 2 Output 3
+[y=600.59] 2 Bus
+[y=602.75] S1 Reset
+[y=609.66] 2 3 128Analog
+[y=611.82] Integrator
+[y=614.41] 1 DD
+[y=616.24] Pixel 1 V
+[y=617.76] PixelPixelPixel
+[y=621.54] 4
+[y=708.32] TSL1401CL Block Diagram
+[y=720.32] Figure 2:
+[y=745.28] The functional blocks of this device are shown below:
+[y=761.96] Block Diagram
+[y=796.34] TSL1401CL  General Description
+
+
+########## PAGE 4 (obj 6) ##########
+[y=31.94] DocumentFeedback
+[y=43.94] ams Datasheet  Page 3
+[y=279.98] a high-impedance state.
+[y=292.94] light level. When the device is not in the output phase, AO is in
+[y=305.96] light input, 2V for normal white level, and 4.8V for saturation
+[y=318.26] DD
+[y=320.78] voltage swing. With V = 5V, the output is nominally 0V for no
+[y=333.8] pull-down resistor. This design allows a rail-to-rail output
+[y=346.76] AO is an op amp-type output that does not require an external
+[y=363.8] the 129 clock pulse.
+[y=367.76] th
+[y=378.8] qt
+[y=381.26] \(pixel charge transfer time\) after
+[y=394.28] integration time is desired, the next SI pulse may be presented after a minimum delay of t
+[y=407.3] return the internal logic to a known state. If a minimum
+[y=420.26] pulse is required to terminate the output of the 128 pixel, and
+[y=424.28] th
+[y=435.98] assumes a high impedance state. Note that this 129 clock
+[y=439.94] th
+[y=451.64] clocked out of the shift register and the analog output AO
+[y=464.6] clock. On the 129 clock rising edge, the SI pulse is
+[y=468.62] th th
+[y=503.66] the 19
+[y=519.38] integrators are reset, and the next integration cycle begins on
+[y=532.34] output amplifier that generates a voltage on analog output AO. Simultaneously, during the first 18 clock cycles, all pixel
+[y=545.36] capacitors is sequentially connected to a charge-coupled
+[y=558.32] and starts an integrator reset period. As the SI pulse is clocked through the shift register, the charge stored on the sampling
+[y=571.34] capacitors to be disconnected from their respective integrators
+[y=584.3] switches in the pixel circuit. This causes all 128 sampling
+[y=597.32] generated from the rising edge of SI and transmitted to analog
+[y=610.34] next rising edge of the clock. An internal signal, called Hold, is
+[y=623.3] clocking in a logic 1 on SI. For proper operation, after meeting the minimum hold time condition, SI must go low before the
+[y=636.32] shift register and reset logic. An output cycle is initiated by
+[y=649.28] The output and reset of the integrators is controlled by a 128-bit
+[y=666.32] proportional to the light intensity and the integration time.
+[y=679.28] amount of charge accumulated at each pixel is directly
+[y=692.3] to the output of the integrator through an analog switch. The
+[y=705.32] During the integration period, a sampling capacitor connects
+[y=722.3] circuitry associated with that pixel.
+[y=735.32] photocurrent, which is integrated by the active integration
+[y=748.28] array. Light energy impinging on a photodiode generates
+[y=759.14] Detailed Description
+[y=761.96] The sensor consists of 128 photodiodes arranged in a linear
+[y=796.1] TSL1401CL  Detailed Description
+
+
+########## PAGE 5 (obj 7) ##########
+[y=31.94] DocumentFeedback
+[y=43.94] Page 4 ams Datasheet
+[y=502.1] rotary encoding.
+[y=515.12] imaging, edge detection and positioning, and optical linear and
+[y=528.14] reading, optical character recognition \(OCR\) and contact
+[y=541.1] applications, including: image scanning, mark and code
+[y=554.12] The TSL1401CL is intended for use in a wide variety of
+[y=571.1] and ground as close as possible to the device.
+[y=583.46] DD
+[y=585.98] A 0.1F bypass capacitor should be connected between V
+[y=609.32] int
+[y=611.78] t is integration time in seconds
+[y=629.12] e
+[y=631.64] E is the incident irradiance in W/cm
+[y=635.66] 2
+[y=652.28] light given in V/\(J/cm)
+[y=656.3] 2
+[y=666.32] e
+[y=668.78] R is the device responsivity for a given wavelength of
+[y=686.12] drk
+[y=688.64] V  is the analog output voltage for dark condition
+[y=705.98] out
+[y=708.44] V  is the analog output voltage for white condition
+[y=727.46] where:
+[y=743.78] outdrke eint
+[y=746.3] V  = V + \(R\) \(E\) \(t)
+[y=763.28] The voltage developed at analog output \(AO\) is given by:
+[y=796.34] TSL1401CL  Detailed Description
+
+
+########## PAGE 6 (obj 8) ##########
+[y=31.94] DocumentFeedback
+[y=43.94] ams Datasheet  Page 5
+[y=191.36] GND6, 7Ground \(substrate\). All voltages are referenced to the substrate.
+[y=213.32] NC5, 8No internal connection
+[y=234.68] DD
+[y=236.24] V 4Supply voltage. Supply voltage for both analog and digital circuits.
+[y=259.16] AO3Analog output
+[y=281.18] CLK2Clock. The clock controls charge transfer, pixel output, and reset.
+[y=303.2] SI1Serial input. SI defines the start of the data-out sequence.
+[y=326.54] Name No.
+[y=339.5] Description
+[y=352.52] Terminal
+[y=387.2] Terminal Functions
+[y=399.2] Figure 4:
+[y=473.82] DD
+[y=476.16] V   4 5  NC
+[y=517.92] AO  3 6  GND
+[y=559.86] CLK  2 7  GND
+[y=601.62] SI  1 8  NC
+[y=642.48] \(TOP VIEW\)
+[y=657.42] CL PACKAGE
+[y=685.28] NC - No internal connectionPackage drawing is not to scale
+[y=697.28] Pin Diagram:
+[y=726.32] Pin Diagram
+[y=738.32] Figure 3:
+[y=759.14] Pin Assignments
+[y=763.28] The TSL1401CL pin assignments are described below:
+[y=796.1] TSL1401CL  Pin Assignments
+
+
+########## PAGE 7 (obj 9) ##########
+[y=31.94] DocumentFeedback
+[y=43.94] Page 6 ams Datasheet
+[y=314.6] HBM
+[y=316.22] ESD ESD tolerance, human body model±2000V
+[y=338.48] STRG
+[y=340.04] T Storage temperature range-2585°C
+[y=362.3] A
+[y=363.86] T Operating free-air temperature range-2585°C
+[y=386.78] Maximum light exposure at 638nm5 mJ/cm
+[y=390.8] 2
+[y=410.78] O
+[y=412.4] I Analog output current range-2525mA
+[y=434.6] DD
+[y=436.22] Continuous current through V or GND -4040mA
+[y=458.48] O O DD
+[y=460.04] I Continuous output current, \(V = 0 to V) -2525mA
+[y=482.96] power-off state
+[y=487.4] DD
+[y=488.96] -0.3V + 0.3VV
+[y=492.44] O
+[y=494.96] V Voltage range applied to any output in the high impedance or
+[y=516.32] OK O O DD
+[y=517.88] I Output clamp current, \(V < 0\) or \(V > V) -2525mA
+[y=540.14] IK I I DD
+[y=541.7] I Input clamp current, \(V < 0\) or \(V > V) -2020mA
+[y=563.96] I DD
+[y=565.52] V Input voltage range-0.3 V + 0.3VV
+[y=587.78] DD
+[y=589.4] V Supply voltage range-0.36V
+[y=613.64] Symbol Parameter Min Max Unit
+[y=674.36] Absolute Maximum Ratings over Operating Free-Air Temperature Range \(unless otherwise noted\)
+[y=686.36] Figure 5:
+[y=711.32] rating conditions for extended periods may affect device reliability.
+[y=724.34] Characteristics is not implied. Exposure to absolute maximum
+[y=737.3] ratings only. Functional operation of the device at these or any other conditions beyond those indicated under Electrical
+[y=750.32] may cause permanent damage to the device. These are stress
+[y=759.14] Absolute Maximum Ratings
+[y=763.28] Stresses beyond those listed under Absolute Maximum Ratings
+[y=796.34] TSL1401CL  Absolute Maximum Ratings
+
+
+########## PAGE 8 (obj 10) ##########
+[y=31.94] DocumentFeedback
+[y=43.94] ams Datasheet  Page 7
+[y=345.5] 2. SI must go low before the rising edge of the next clock pulse.
+[y=356.96] qt
+[y=359] where 128 is the number of pixels in series, 18 is the required logic setup clocks, and 20s is the pixel charge transfer time \(t)
+[y=368.48] int\(min\)
+[y=370.46] t  = \(128 - 18\)  clock period + 20s
+[y=380.48] 1. Integration time is calculated as follows:
+[y=393.44] Note\(s\):
+[y=425.48] A
+[y=427.04] T Operating free-air temperature070°C
+[y=449.72] h(SI)Hold time, serial input
+[y=451.28] t 0ns
+[y=453.98] \(2\)
+[y=473.96] su(SI)
+[y=475.52] t Setup time, serial input20ns
+[y=498.2] intSensor integration time
+[y=499.82] t 0.03375100ms
+[y=502.46] (1)
+[y=522.44] clock
+[y=524.06] f Clock frequency58000kHz
+[y=546.98] Wavelength of light source4001000nm
+[y=568.28] IL
+[y=569.9] V Low-level input voltage00.8V
+[y=592.1] IH DD
+[y=593.72] V High-level input voltage2 V V
+[y=615.98] I DD
+[y=617.54] V Input voltage0 V V
+[y=639.8] DD
+[y=641.36] V Supply voltage355.5V
+[y=665.66] Symbol Parameter Min Nom Max Unit
+[y=700.28] Recommended Operating Conditions \(see Figure10 and Figure11
+[y=712.28] Figure 6:
+[y=737.3] SQC \(Statistical Quality Control\) methods.
+[y=750.32] values are guaranteed with production tests or
+[y=759.14] Electrical Characteristics
+[y=763.28] All limits are guaranteed. The parameters with min and max
+[y=796.1] TSL1401CL  Electrical Characteristics
+
+
+########## PAGE 9 (obj 11) ##########
+[y=31.94] DocumentFeedback
+[y=43.94] Page 8 ams Datasheet
+[y=252.26] IH I DD
+[y=253.88] I High-level input currentV = V 1A
+[y=276.14] DD e
+[y=277.7] V = 3V, E = 0 2.64.5
+[y=288.02] DD
+[y=289.64] I Supply current mA
+[y=299.96] DD e
+[y=301.52] V = 5V, E = 0 2.84.5
+[y=324.44] ILImage lagSee note  \(9\) 0.5%
+[y=345.8] e
+[y=348.26] DSNUDark signal nonuniformityAll pixels, E = 0  0.020.05V
+[y=352.28] (8)
+[y=372.26] DD
+[y=374.78] V = 3V  78
+[y=378.8] (7)
+[y=387.14] SESaturation exposure nJ/cm
+[y=391.1] 2
+[y=398.78] DD
+[y=401.3] V = 5V  136
+[y=405.26] (7)
+[y=425.3] L
+[y=427.76] R = 330
+[y=433.76] 2.52.8
+[y=439.1] DD
+[y=441.62] V = 3V,
+[y=451.04] sat
+[y=452.6] V Analog output saturation voltage V
+[y=462.98] L
+[y=465.44] R = 330
+[y=471.44] 4.54.8
+[y=476.78] DD
+[y=479.3] V = 5V,
+[y=501.32] (J/cm)
+[y=505.28] 2
+[y=507.02] e
+[y=508.64] R ResponsivitySee note \(6\)253545
+[y=515.96] V/
+[y=537.98] Output noise voltageSee note \(5\) 1mVrms
+[y=559.94] voltage
+[y=565.94] See note \(4\) ±0.4%FS
+[y=571.94] Nonlinearity of analog output
+[y=593.96] PRNUPixel response nonuniformitySee note \(3\) ±4%±10%
+[y=615.98] \(dark, average over 128 pixels\)
+[y=620.36] drk e
+[y=621.98] V E = 0 00.10.2V
+[y=627.98] Analog output voltage
+[y=649.94] \(white, average over 128 pixels\)
+[y=654.38] out
+[y=655.94] V See note \(2\)1.622.4V
+[y=661.94] Analog output voltage
+[y=685.28] Conditions
+[y=691.82] Symbol Parameter Min Typ Max Unit
+[y=698.3] Test
+[y=732.32] e
+[y=734.78] E = 11W/cm \(unless otherwise noted\)
+[y=738.8] 2 \(1\)
+[y=748.82] clock DD A p int L
+[y=751.28] Electrical Characteristics at f = 1MHz, V = 5V, T = 25°C,  = 640nm, t = 5ms, R = 330,
+[y=763.28] Figure 7:
+[y=796.34] TSL1401CL  Electrical Characteristics
+
+
+########## PAGE 10 (obj 12) ##########
+[y=31.94] DocumentFeedback
+[y=43.94] ams Datasheet  Page 9
+[y=129.56] s L L
+[y=131.18] t Analog output settling time to ±1%R = 330, C = 10pF 120ns
+[y=155.42] Symbol Parameter Test ConditionsMinTypMaxUnit
+[y=202.1] Dynamic Characteristics over Recommended Ranges of Supply Voltage and Operating Free-Air Temperature
+[y=214.1] Figure 9:
+[y=237.44] 2. SI must go low before the rising edge of the next clock pulse.
+[y=248.9] r f
+[y=250.88] 1. Input pulses have the following characteristics: t = 6ns, t = 6ns.
+[y=263.9] Note\(s\):
+[y=295.88] qt
+[y=297.5] t Pixel charge transfer time20s
+[y=319.76] r f
+[y=321.32] t, tInput transition \(rise and fall\) time0500ns
+[y=343.58] w
+[y=345.14] t Pulse duration, clock high or low50ns
+[y=367.82] h(SI)Hold time, serial input
+[y=369.38] t 0ns
+[y=372.08] \(1\),\(2\)
+[y=392.48] su(SI)Setup time, serial input
+[y=394.04] t 20ns
+[y=396.74] \(1\)
+[y=418.76] Symbol Parameter Min Nom Max Unit
+[y=453.38] Timing Requirements \(see Figure10 and Figure11)
+[y=465.38] Figure 8:
+[y=489.8] outwhite() drk
+[y=492.74] V V
+[y=498.62] IL=--------------------------------------------×100
+[y=503.24] outIL() drk
+[y=506.12] V V
+[y=518.54] a pixel is exposed to a white condition followed by a dark condition:
+[y=528.56] 9. Image lag is a residual signal left in a pixel from a previous exposure. It is defined as a percent of white-level signal remaining after
+[y=540.56] 8. DSNU is the difference between the maximum and minimum output voltage for all pixels in the absence of illumination.
+[y=552.02] \(min\)sat\(min\)drk\(min\)eintout\(max\)drk\(min\)
+[y=554] 7. SE = [V - V] × (E × t\) ÷ [V - V]
+[y=565.52] e\(min\)out\(min\)drk\(max\)eint
+[y=567.5] 6. R = [V - V] ÷ (E × t)
+[y=579.5] 5. RMS noise is the standard deviation of a single-pixel output under constant illumination as observed over a 5-second period.
+[y=591.5] of analog output voltage \(white\).
+[y=601.52] 4. Nonlinearity is defined as the maximum deviation from a best-fit straight line over the dark-to-white irradiance levels, as a percent
+[y=613.52] device under test when the array is uniformly illuminated at the white irradiance level. PRNU includes DSNU.
+[y=623.48] 3. PRNU is the maximum difference between the voltage from any single pixel and the average output voltage from all pixels of the
+[y=635.48] 2. The array is uniformly illuminated with a diffused LED source having a peak wavelength of 640nm.
+[y=646.94] DD
+[y=648.98] 1. All measurements made with a 0.1F capacitor connected between V and ground.
+[y=661.94] Note\(s\):
+[y=691.94] i
+[y=693.56] C Input capacitance5pF
+[y=715.82] IL I
+[y=717.38] Low-level input currentV = 0 1A
+[y=730.28] I
+[y=741.62] Conditions
+[y=748.16] Symbol Parameter Min Typ Max Unit
+[y=754.64] Test
+[y=796.1] TSL1401CL  Electrical Characteristics
+
+
+########## PAGE 11 (obj 13) ##########
+[y=31.94] DocumentFeedback
+[y=43.94] Page 10 ams Datasheet
+[y=182.5] Pixel 1 Pixel 128
+[y=187.15] AO
+[y=207.56] s
+[y=209.07] t
+[y=233.91] h(SI)
+[y=235.43] t
+[y=240.72] 0 V0 V
+[y=248.49] SI
+[y=250.01] 50%
+[y=256.27] 5 V5 V
+[y=265.13] su(SI)
+[y=266.64] t
+[y=284.78] CLK 2.5 V
+[y=298.39] w 12128129
+[y=300.34] t
+[y=369.26] Operational Waveforms
+[y=381.26] Figure 11:
+[y=459.69] Hi-Z Hi-Z
+[y=465.31] ÎÎÎÎÎÎÎÎÎÎÎÎÎÎÎÎÎÎÎÎ ÎÎÎÎÎÎÎÎ
+[y=476.43] AO
+[y=479.13] ÎÎÎÎÎÎÎÎÎÎÎÎÎÎÎÎÎÎÎÎ ÎÎÎÎÎÎÎÎ
+[y=494.79] 129 Clock Cycles
+[y=520.5] Not Integrating Integrating
+[y=522.44] Integration
+[y=539.94] int
+[y=541.45] 18 Clock Cyclest
+[y=558.41] Reset
+[y=567.37] Internal
+[y=599.66] SI qt
+[y=601.17] t
+[y=633.58] CLK
+[y=710.3] Timing Waveforms
+[y=722.3] Figure 10:
+[y=743.12] Information
+[y=759.14] Parameter Measurement
+[y=796.34] TSL1401CL  Parameter Measurement Information
+
+
+########## PAGE 12 (obj 14) ##########
+[y=31.94] DocumentFeedback
+[y=43.94] ams Datasheet  Page 11
+[y=117.91] A
+[y=119.59] T  Free-Air Temperature  °C
+[y=133.87] 01030407020 5060
+[y=145.63] 0
+[y=168.07] I
+[y=170.35] DD
+[y=179.71]  Normalized Idle Supply Current
+[y=189.07] 0.5
+[y=238.27] 1
+[y=285.55] 1.5
+[y=333.56] 2
+[y=390.56] Normalized Idle Supply Current vs. Free-Air Temperature
+[y=402.56] Figure 13:
+[y=455.99]   Wavelength  nm
+[y=470.87] 30040050060070080090010001100
+[y=479.63] 0
+[y=518.51] 0.2
+[y=535.43] Relative Responsivity
+[y=554.99] 0.4
+[y=593.99] 0.6
+[y=632.4] 0.8
+[y=660.72] A
+[y=662.4] T = 25°C
+[y=670.8] 1
+[y=724.28] Photodiode Spectral Responsivity
+[y=736.28] Figure 12:
+[y=759.14] Typical Characteristics
+[y=796.1] TSL1401CL  Typical Characteristics
+
+
+########## PAGE 13 (obj 15) ##########
+[y=31.94] DocumentFeedback
+[y=43.94] Page 12 ams Datasheet
+[y=145.51] A
+[y=147.19] T  Free-Air Temperature  °C
+[y=158.71] 01030407020 5060
+[y=169.39] 0.06
+[y=216.32] 0.07
+[y=222.2] V int
+[y=223.88] t = 2.5 ms
+[y=227.6] out
+[y=236.6]  Output Voltageint
+[y=238.28] t = 5 ms
+[y=251.36] int
+[y=253.04] t = 15 ms
+[y=262.04] 0.08
+[y=310.76] 0.09
+[y=333.32] int
+[y=335] t = 1 ms
+[y=337.52] DD
+[y=339.2] V = 5 V
+[y=344.84] int
+[y=346.52] t = 0.5 ms
+[y=357.2] 0.10
+[y=417.56] Dark Output Voltage vs. Free-Air Temperature
+[y=429.56] Figure 15:
+[y=483.51] A
+[y=485.19] T  Free-Air Temperature  °C
+[y=495.27] 01030407020 5060
+[y=507.27] 0
+[y=550.71] V0.5
+[y=556.47] out
+[y=566.55]  Output Voltage  V
+[y=599.91] 1
+[y=647.2] 1.5
+[y=665.44] int
+[y=667.12] t = 0.5 ms to 15 ms
+[y=675.4] DD
+[y=677.08] V = 5 V
+[y=695.2] 2
+[y=751.28] White Output Voltage vs. Free-Air Temperature
+[y=763.28] Figure 14:
+[y=796.34] TSL1401CL  Typical Characteristics
+
+
+########## PAGE 14 (obj 16) ##########
+[y=31.94] DocumentFeedback
+[y=43.94] ams Datasheet  Page 13
+[y=133.55] L
+[y=135.23] R  Load Resistance  
+[y=146.27] 02004006008001000
+[y=152.39] 0
+[y=178.55] 10 pF
+[y=185.03] 100
+[y=201.59] 100 pF
+[y=205.67] Settling Time to 1%  ns
+[y=216.35] 200300
+[y=248.39] 400
+[y=259.79] 220 pF
+[y=280.8] 500
+[y=297.48] 470 pF
+[y=312.12] 600
+[y=322.92] out
+[y=324.6] V = 1 V
+[y=332.52] DD
+[y=334.2] V = 5 V
+[y=405.08] DD
+[y=407.6] Settling Time vs. Load \(V=5V\)
+[y=419.6] Figure 17:
+[y=478.92] L
+[y=480.6] R  Load Resistance  
+[y=491.52] 02004006008001000
+[y=497.76] 0
+[y=522.6] 10 pF
+[y=530.4] 100
+[y=548.88] 100 pF
+[y=551.28] Settling Time to 1%  ns
+[y=561.72] 200
+[y=593.05] 300
+[y=610.21] 220 pF
+[y=624.97] 400
+[y=645.97] 470 pF
+[y=657.37] 500
+[y=668.29] out
+[y=669.97] V = 1 V
+[y=677.89] DD
+[y=679.57] V = 3 V
+[y=688.81] 600
+[y=748.82] DD
+[y=751.28] Settling Time vs. Load \(V=3V\)
+[y=763.28] Figure 16:
+[y=796.1] TSL1401CL  Typical Characteristics
+
+
+########## PAGE 15 (obj 17) ##########
+[y=31.94] DocumentFeedback
+[y=43.94] Page 14 ams Datasheet
+[y=81.62] the next clock the previous pixel S2 switch is put into position1
+[y=94.58] position 3 to read the output voltage during the n clock. On
+[y=98.6] th
+[y=110.3] period from the 19 clock through the n clock, S2 is put into
+[y=114.26] th th
+[y=125.96] that the sampling capacitor can begin storing charge. For the
+[y=138.92] an SI pulse, pixels 1 through 18 have switch S2 in position 1 so
+[y=151.94] integrating capacitor is being reset. On the 19 clock following
+[y=155.96] th
+[y=167.6] The first 18 pixel voltages are output during the time the
+[y=184.64] all of the pixels begin a new integration cycle.
+[y=197.6] clock, the S1 switch for all the pixels is put into position 1 and
+[y=214.64] th
+[y=288.75] begin the next integration cycle. On the rising edge of the 19
+[y=304.41] reset \(zero out\) the integrating capacitor so that it is ready to
+[y=317.43] is applied, the S1 switch for all pixels remains in position 2 to
+[y=330.39] Following the SI pulse and the next 17 clocks after the SI pulse
+[y=347.43] output.
+[y=360.39] pixel 1 is put into position 2 and S2 for pixel 2 is put into position3 so that the voltage of pixel 2 is available on the
+[y=373.41] pixel 1 available on the analog output. On the next clock, S2 for
+[y=386.37] and held by moving S2 to position 2 for all pixels. During this event, S2 for pixel 1 is in position 3. This makes the voltage of
+[y=399.38] At SI input, all of the pixel voltages are simultaneously scanned
+[y=416.36] S1 \(position 2\).
+[y=429.38] resetting of the Integrating Capacitor to zero by closing switch
+[y=442.34] voltage. The voltage is sampled on the Sampling Capacitor by closing switch S2 \(position 1\) \(see Figure2\). Logic controls the
+[y=455.36] photodiode. The photodiode converts light intensity to a
+[y=468.32] Each pixel of the linear array consists of a light-sensitive
+[y=485.36] applications.
+[y=498.38] integration time creating a higher output voltage in low light
+[y=511.34] 100ms between SI pulses can be added to increase the
+[y=524.36] the (n+1\) clocks. A wait time adding up to a maximum total of
+[y=537.38] applied to SI. It is not necessary to send SI immediately on/after
+[y=550.34] number of pixels, must occur before the next high pulse is
+[y=563.36] setup. However, a minimum of \(n+1\) clocks, where n is the
+[y=576.38] clock edge\) starts a new cycle of pixel output and integration
+[y=589.34] configuration will be assumed unless otherwise noted. Sending a high pulse to SI \(observing timing rules for setup and hold to
+[y=602.36] configured with the SI and HOLD pins tied together. This
+[y=615.32] \(Start Integration\) positive pulse and the HOLD positive pulse minus the 18 setup clocks. The TSL14xx linear array is normally
+[y=628.34] The integration time is the time between the SI
+[y=645.32] saturation for a wide range of light levels.
+[y=658.34] voltage can be obtained on the output pin while avoiding
+[y=671.3] period is a powerful and useful feature of the ams TSL14xx linear array family. By changing the integration time, a desired output
+[y=684.32] integrating capacitor. The flexibility to adjust the integration
+[y=697.28] which light is sampled and charge accumulates on each pixels
+[y=710.3] The integration time of the linear array is the period during
+[y=726.98] Integration Time
+[y=759.14] Principles of Operation
+[y=796.34] TSL1401CL  Principles of Operation
+
+
+########## PAGE 16 (obj 18) ##########
+[y=31.94] DocumentFeedback
+[y=43.94] ams Datasheet  Page 15
+[y=159.02] analog output voltage for each pixel falls below the saturation level. The goal of reducing the period of time the light sampling
+[y=172.04] occurs, the integration period should be reduced until the
+[y=185] during a given integration period produces a saturated output \(Max Voltage output\), then the data is not accurate. If this
+[y=198.02] integration time. If the amount of light incident on the array
+[y=210.98] range between the minimum and maximum limits for
+[y=224] The integration time chosen is valid as long as it falls in the
+[y=241.04] transition.
+[y=254] practice to leave the clock in a low state when inactive because the SI pulse required to start a new cycle is a low-to-high
+[y=267.02] high-impedance state after the n+1 high clock edge. It is good
+[y=279.98] from power up. After that, the SI pulse is valid from the time following \(n+1\) clocks. The output will go into a
+[y=293] times after the first SI pulse to clock out indeterminate data
+[y=305.96] It is good practice on initial power up to run the clock \(n+1\)
+[y=322.28] int(min)
+[y=324.8] = 0.125s × \(128 - 18\) + 20s = 33.75s
+[y=363.86] T
+[y=380.84] of 8MHz, the minimum integration time would be:
+[y=393.86] In the case of the TSL1401CL with the maximum clock frequency
+[y=410.9] n is the number of pixels
+[y=413.48] maximumclockfrequency
+[y=416.48] intmin()
+[y=419.36] T =-------------------------------------------------------------------------×()n18 pixels20+µs
+[y=422.54] 
+[y=424.52] 1
+[y=427.88] where:
+[y=486.02] equation:
+[y=499.04] The minimum integration time can be calculated from the
+[y=516.02] 8MHz.
+[y=529.04] in this data sheet is based on the maximum clock frequency of
+[y=542] integration time and reduces the maximum light level for saturation on the output. The minimum integration time shown
+[y=555.02] pixels in the array. A slower clock speed increases the minimum
+[y=567.98] pixels is a constant. Therefore, the minimum integration period is simply a function of the clock frequency and the number of
+[y=581] time to discharge the pixels. The time required to discharge the
+[y=593.96] by time required to clock out all the pixels in the array and the
+[y=606.98] The minimum integration time for any given array is determined
+[y=623.96] wait must occur before the next SI pulse to start a new integration and output cycle.
+[y=636.98] transfer time of 20s. Therefore, after n+1 clocks, an extra 20s
+[y=649.94] the voltage level of the integrating capacitor is the charge
+[y=662.96] to guarantee the sampling capacitor for pixel n will charge to
+[y=675.98] level of the integrating capacitor. The minimum time needed
+[y=688.94] for the sampling capacitor of pixel n to charge to the voltage
+[y=701.96] If a SI was initiated on the n+1 clock, there would be no time
+[y=718.94] position 1 and the output goes to a high-impedance state.
+[y=731.96] On the n+1 clock, the S2 switch for the last \(n\) pixel is put into
+[y=735.98] th
+[y=747.62] example, S2 for pixel 19 moves to position 1 on the 20 clock.
+[y=751.64] th
+[y=763.28] to start sampling the integrating capacitor voltage. For
+[y=796.1] TSL1401CL  Principles of Operation
+
+
+########## PAGE 17 (obj 19) ##########
+[y=31.94] DocumentFeedback
+[y=43.94] Page 16 ams Datasheet
+[y=504.38] conversion must be less than the clock period.
+[y=517.4] setup and hold times required for the analog-to-digital
+[y=530.36] be the limiter for the maximum clock frequency. The voltage output is available for the whole period of the clock, so the
+[y=543.38] speed of the A/D converter used in the application is likely to
+[y=556.34] range of operating frequencies up to a maximum of 8MHz, the
+[y=569.36] Although the linear array is capable of running over a wide
+[y=586.34] out as the next light sample is being integrated.
+[y=599.36] by the linear array: the previous measured light data is clocked
+[y=612.38] words, at any given time, two groups of data are being handled
+[y=625.34] during the next integration period and is clocked out sequentially at a rate of one pixel per clock period. In other
+[y=638.36] one integration period is made available on the analog output
+[y=651.32] It should be noted that the data from the light sampled during
+[y=668.36] time should not exceed 100ms for accurate measurements.
+[y=681.32] by the length of time the integrating capacitors on the pixels can hold their accumulated charge. The maximum integration
+[y=694.34] time is not exceeded. The maximum integration time is limited
+[y=707.3] levels, the output voltage level can be increased by increasing the integration period provided that the maximum integration
+[y=720.32] If the light intensity produces an output below desired signal
+[y=737.3] than or equal to the minimum integration period.
+[y=750.32] saturation. However, the integration time must still be greater
+[y=763.28] window is active is to lower the output voltage level to prevent
+[y=796.34] TSL1401CL  Principles of Operation
+
+
+########## PAGE 18 (obj 20) ##########
+[y=31.94] DocumentFeedback
+[y=43.94] ams Datasheet  Page 17
+[y=227.42] 2. This drawing is subject to change without notice.
+[y=239.42] 1. All linear dimensions are in millimeters.
+[y=252.44] Note\(s\):
+[y=319.43] 0.8
+[y=389.12] 0.8
+[y=458.4] 2.5
+[y=555.83] 1.4
+[y=596.54] Pin 1 1.3
+[y=663.32] Suggested CL Package PCB Layout
+[y=675.32] Figure 18:
+[y=700.28] shown in Figure18.
+[y=713.3] Suggested PCB pad layout guidelines for the CL package are
+[y=729.98] PCB Pad Layout
+[y=743.12] Hardware
+[y=759.14] Application Information:
+[y=796.1] TSL1401CL  Application Information: Hardware
+
+
+########## PAGE 19 (obj 21) ##########
+[y=31.94] DocumentFeedback
+[y=43.94] Page 18 ams Datasheet
+[y=103.46] 4. Contact finish is soft gold plated.5. This package contains no lead \(Pb\).6. This drawing is subject to change without notice.
+[y=115.46] 3. Package top surface is molded with an electrically nonconductive clear plastic compound having an index of refraction of 1.56.
+[y=127.46] pixels are 95.3m \(H\) by 37m \(W\). There is 8m spacing between all pixels. See Array Detail A.
+[y=137.48] closer to Pin 1. The inner pixels measure 63.5m \(H\) by 55.5m \(W\), the next-to-end pixels are 76.6m \(H\) by 46m \(W\), and the end
+[y=147.5] 2. Nominal photodiode array dimension. The array is made up of 124 inner pixels, 2 next-to-end pixels, and 2 end pixels. Pixel #1 is
+[y=159.5] 1. All linear dimensions are in millimeters. Dimension tolerance is ±0.05mm unless otherwise noted.
+[y=172.46] Note\(s\):
+[y=224.02] Green
+[y=265.8] 7.5  0.08 RoHS
+[y=271.39] Pb
+[y=283.75] 2.5 1.0
+[y=299.49] 0.6
+[y=304.87] L
+[y=307.72] C of Photodiode Array Area
+[y=326.94] 1.8
+[y=334.97] L
+[y=337.4] Cof Package
+[y=354.5] 0.6 0.305
+[y=367.28] 0.95 0.95
+[y=371.5] 0.8
+[y=380.27] Pin 1
+[y=383.33] 0.0208
+[y=392.21] (Not to Scale)
+[y=395.48] L
+[y=398.12] Cof Pixel 5 Photodiode Array
+[y=409.1] L
+[y=411.11] Cof Solder Contact
+[y=416.28] VIEW
+[y=425.89] BOTTOM
+[y=468.34] 1.2  0.2
+[y=478.38] 0.22
+[y=502.98] SIDE VIEW END VIEW
+[y=525.26] (Not to Scale)
+[y=532.13] Photodiode Array
+[y=535.51] 9.4  0.2 37
+[y=543.32] 46
+[y=549.76] 55.5
+[y=552.09] 8.064 (see note B)
+[y=570.67] Pin 1
+[y=577.54] 95.3
+[y=583.24] 76.6
+[y=585.67] 63.5
+[y=600.03] A 3.0  0.2
+[y=614.18] 8
+[y=625.27] (Note 2)
+[y=632.13] 0.0635
+[y=645.02] \(Note 2)
+[y=651.78] TOP VIEW ARRAY DETAIL A
+[y=726.32] Package CL Configuration
+[y=738.32] Figure 19:
+[y=759.14] Package Information
+[y=796.34] TSL1401CL  Package Information
+
+
+########## PAGE 20 (obj 22) ##########
+[y=31.94] DocumentFeedback
+[y=43.94] ams Datasheet  Page 19
+[y=115.94] 7. This drawing is subject to change without notice.
+[y=127.94] 6. In accordance with EIA standard, device pin 1 is located next to the sprocket holes in the tape.
+[y=139.94] 5. ams packaging tape and reel conform to the requirements of EIA Standard 481-B.
+[y=151.94] 4. Each reel is 178 millimeters in diameter and contains 1000 parts.
+[y=163.4] oo o
+[y=165.44] 3. Symbols on drawing A, B, and K are defined in ANSI EIA Standard 481-B 2001.
+[y=177.44] 2. The dimensions on this drawing are for illustrative purposes only. Dimensions of an actual carrier may vary slightly.
+[y=189.44] 1. All linear dimensions are in millimeters. Dimension tolerance is ±0.10mm unless otherwise noted.
+[y=202.4] Note\(s\):
+[y=417.99] o o
+[y=420.51] o B K
+[y=423.87] A
+[y=433.11] 9.85 1.53
+[y=435.87] 3.45  0.02
+[y=447.03] 0.30
+[y=453.27] 7 Max
+[y=455.31] 8 Max
+[y=492.39] DETAIL A DETAIL B
+[y=535.83] + 0.25 0.00 AA B
+[y=544.95]  1.50
+[y=588.28] 7.50
+[y=619.24] +  0.30 0.10
+[y=629.2] 16.00
+[y=657.4] B
+[y=693.76] 8.00 4.00
+[y=703.24] + 0.10 0.00
+[y=708.52] 2.00 1.75
+[y=712]  1.50
+[y=718] TOP VIEW
+[y=751.28] Package CL Carrier Tape
+[y=763.28] Figure 20:
+[y=796.1] TSL1401CL  Package Information
+
+
+########## PAGE 21 (obj 23) ##########
+[y=31.94] DocumentFeedback
+[y=43.94] Page 20 ams Datasheet
+[y=122.63] soak 1
+[y=124.68] t t
+[y=137.82] 2
+[y=139.87] t
+[y=152.42] 3
+[y=154.46] Time \(s\) t
+[y=169.22] Temperature \(
+[y=231.8] 
+[y=235.63] C)
+[y=271.35] 1
+[y=273.39] T
+[y=293.81] 2
+[y=295.85] T
+[y=318.74] 3
+[y=320.79] T
+[y=329.03] peak
+[y=331.08] T
+[y=338.4] Not to scale  for reference only
+[y=412.16] Solder Reflow Profile Graph
+[y=424.16] Figure 22:
+[y=445.1] Temperature gradient in coolingMax -5°C/s
+[y=466.46] peak
+[y=468.98] Peak temperature in reflowT 260°C
+[y=490.28] peak 3 3
+[y=492.8] Time above T - 10°C \(T)t Max 10 s
+[y=514.1] 2 2
+[y=516.62] Time above 230°C \(T)t Max 50 s
+[y=537.98] 1 1
+[y=540.44] Time above 217°C \(T)t Max 60 s
+[y=561.8] soak
+[y=564.32] Soak timet 2 to 3 minutes
+[y=586.28] Average temperature gradient in preheating2.5°C/s
+[y=609.62] Parameter Reference Device
+[y=657.32] Solder Reflow Profile
+[y=669.32] Figure 21:
+[y=694.34] of three passes through this solder reflow profile.
+[y=707.3] product on a PCB. Temperature is measured on top of component. The components should be limited to a maximum
+[y=720.32] exposure of components during the solder reflow process of
+[y=733.28] The solder reflow profile describes the expected maximum heat
+[y=750.32] ability to be reflow soldered to a PCB substrate.
+[y=759.14] Soldering Information
+[y=763.28] The CL package has been tested and has demonstrated an
+[y=796.34] TSL1401CL  Soldering Information
+
+
+########## PAGE 22 (obj 24) ##########
+[y=31.94] DocumentFeedback
+[y=43.94] ams Datasheet  Page 21
+[y=456.32] has been open for more than 24 hours. If rebaking is required, it should be done at 60°C for 24 hours.
+[y=469.34] unopened for more than 6 months or if the aluminized envelope
+[y=482.3] Rebaking will be required if the devices have been stored
+[y=506.36] Opened Time: 24 hours or fewer
+[y=524.36] aluminized envelope - if unopened
+[y=536.36] Total Time: 6 months from the date code on the
+[y=554.36] Relative Humidity: 60% maximum
+[y=572.36] Temperature Range: 5°C to 50°C
+[y=591.32] of MSL 5a and the devices should be stored under the following conditions:
+[y=604.34] The CL package has been assigned a moisture sensitivity level
+[y=621.32] handling, and storage before use.
+[y=634.34] gel to protect them from ambient moisture during shipping,
+[y=647.3] being packed for shipping. Devices are packed in a sealed aluminized envelope called a moisture barrier bag with silica
+[y=660.32] absorbed moisture possible, each device is dry-baked prior to
+[y=673.28] To ensure the package contains the smallest amount of
+[y=686.3] moisture that has been previously absorbed into the package.
+[y=699.32] during the soldering process by the release and vaporization of
+[y=712.28] Optical characteristics of the device can be adversely affected
+[y=728.96] Moisture Sensitivity
+[y=759.14] Storage Information
+[y=796.1] TSL1401CL  Storage Information
+
+
+########## PAGE 23 (obj 25) ##########
+[y=31.94] DocumentFeedback
+[y=43.94] Page 22 ams Datasheet
+[y=368.3] Website: www.ams.com
+[y=385.28] Tel: +43 \(0\) 3136 500 0
+[y=411.32] Austria, Europe
+[y=424.28] Tobelbader Strasse 308141 Premstaetten
+[y=437.3] ams AG
+[y=450.26] Headquarters
+[y=484.28] www.ams.com/contact
+[y=497.3] For sales offices, distributors and representatives, please visit:
+[y=514.28] ams_sales@ams.com
+[y=527.3] For further information and requests, e-mail us at:
+[y=544.28] www.ams.com/Document-Feedback
+[y=557.3] Provide feedback about this document at:
+[y=574.28] www.ams.com/Technical-Support
+[y=587.3] Technical Support is available at:
+[y=604.28] www.ams.com/ICdirect
+[y=617.3] Buy our products or get free samples online at:
+[y=668.3] TSL1401CL128 × 1 ArrayCLTape & Reel1000 pcs/reel
+[y=691.64] Ordering CodeType Package DesignatorDelivery FormDelivery Quantity
+[y=726.32] Ordering Information
+[y=738.32] Figure 23:
+[y=759.14] Ordering & Contact Information
+[y=796.34] TSL1401CL  Ordering & Contact Information
+
+
+########## PAGE 24 (obj 26) ##########
+[y=31.94] DocumentFeedback
+[y=43.94] ams Datasheet  Page 23
+[y=521.42] information may not be available for release.
+[y=534.38] chemical analysis on incoming materials and chemicals. ams AG and ams AG suppliers consider certain information to be proprietary, and thus CAS numbers and other limited
+[y=547.4] information but may not have conducted destructive testing or
+[y=560.36] to take reasonable steps to provide representative and accurate
+[y=573.38] information from third parties. ams AG has taken and continues
+[y=586.4] information. Efforts are underway to better integrate
+[y=599.36] on information provided by third parties, and makes no representation or warranty as to the accuracy of such
+[y=612.38] date that it is provided. ams AG bases its knowledge and belief
+[y=625.34] statement represents ams AG knowledge and belief as of the
+[y=638.36] Important Information: The information provided in this
+[y=655.34] \(Br or Sb do not exceed 0.1% by weight in homogeneous material\).
+[y=668.36] free of Bromine \(Br\) and Antimony \(Sb\) based flame retardants
+[y=681.32] defines that in addition to RoHS compliance, our products are
+[y=694.34] ams Green \(RoHS compliant and no Sb/Br\): ams Green
+[y=711.32] be soldered at high temperatures, RoHS compliant products are suitable for use in specified lead-free processes.
+[y=724.34] 0.1% by weight in homogeneous materials. Where designed to
+[y=737.3] products do not contain any chemicals for all 6 substance categories, including the requirement that lead not exceed
+[y=742.88] Statement
+[y=750.32] fully comply with current RoHS directives. Our semiconductor
+[y=758.9] RoHS Compliant & ams Green
+[y=763.28] RoHS: The term RoHS compliant means that ams AG products
+[y=796.1] TSL1401CL  RoHS Compliant & ams Green Statement
+
+
+########## PAGE 25 (obj 27) ##########
+[y=31.94] DocumentFeedback
+[y=43.94] Page 24 ams Datasheet
+[y=456.38] of ams AG rendering of technical or other services.
+[y=469.4] or liability to recipient or any third party shall arise or flow out
+[y=482.42] performance or use of the technical data herein. No obligation
+[y=495.38] indirect, special, incidental or consequential damages, of any kind, in connection with or arising out of the furnishing,
+[y=508.4] damage, loss of profits, loss of use, interruption of business or
+[y=521.36] damages, including but not limited to personal injury, property
+[y=534.38] ams AG shall not be liable to recipient or any third party for any
+[y=551.42] for a particular purpose are disclaimed.
+[y=564.38] limited to the implied warranties of merchantability and fitness
+[y=577.4] and any express or implied warranties, including, but not
+[y=590.42] each application. This product is provided by ams AG AS IS
+[y=603.38] life-support or life-sustaining equipment are specifically not recommended without additional processing by ams AG for
+[y=616.4] high reliability applications, such as military, medical
+[y=629.36] commercial applications. Applications requiring extended temperature range, unusual environmental requirements, or
+[y=642.38] for current information. This product is intended for use in
+[y=655.34] at any time and without notice. Therefore, prior to designing this product into a system, it is necessary to check with ams AG
+[y=668.36] ams AG reserves the right to change specifications and prices
+[y=681.32] Trade. ams AG makes no warranty, express, statutory, implied, or by description regarding the information set forth herein.
+[y=694.34] indemnification provisions appearing in its General Terms of
+[y=707.3] Devices sold by ams AG are covered by the warranty and patent
+[y=724.34] the copyright owner.
+[y=737.3] material herein may not be reproduced, adapted, merged, translated, stored, or used without the prior written consent of
+[y=750.32] Austria-Europe. Trademarks Registered. All rights reserved. The
+[y=758.96] Copyrights & Disclaimer
+[y=763.28] Copyright ams AG, Tobelbader Strasse 30, 8141 Premstaetten,
+[y=796.34] TSL1401CL  Copyrights & Disclaimer
+
+
+########## PAGE 26 (obj 28) ##########
+[y=31.94] DocumentFeedback
+[y=43.94] ams Datasheet  Page 25
+[y=550.28] Datasheet \(discontinued\)Discontinued
+[y=562.28] conform to specifications in accordance with the terms of ams AG standard warranty as given in the General Terms of Trade, but these products have been superseded and should not be used for new designs
+[y=574.28] Information in this datasheet is based on products which
+[y=584.3] DatasheetProduction
+[y=596.3] ramp-up to full production or full production which conform to specifications in accordance with the terms of ams AG standard warranty as given in the General Terms of Trade
+[y=608.3] Information in this datasheet is based on products in
+[y=630.32] Preliminary DatasheetPre-ProductionThe performance and parameters shown in this document are preliminary without any warranty and are subject to change without notice
+[y=642.32] design, validation or qualification phase of development.
+[y=654.32] Information in this datasheet is based on products in the
+[y=670.28] Product PreviewPre-Development
+[y=676.28] the planning phase of development. All specifications are design goals without any warranty and are subject to change without notice
+[y=688.28] Information in this datasheet is based on product ideas in
+[y=711.62] Document StatusProduct Status Definition
+[y=759.56] Document Status
+[y=796.1] TSL1401CL  Document Status
+
+
+########## PAGE 27 (obj 29) ##########
+[y=31.94] DocumentFeedback
+[y=43.94] Page 26 ams Datasheet
+[y=629.66] 2. Correction of typographical errors is not explicitly mentioned.
+[y=641.66] 1. Page and figure numbers for the previous version may differ from page and figure numbers in the current revision.
+[y=654.62] Note\(s\):
+[y=688.28] Updated Figure 5 and removed notes under it6
+[y=711.62] Changes from 1-00 \(2016-Jun-21\) to current revision 1-01 \(2017-Aug-30\)Page
+[y=758.66] Revision Information
+[y=796.34] TSL1401CL  Revision Information
+
+
+########## PAGE 28 (obj 30) ##########
+[y=31.94] DocumentFeedback
+[y=43.94] ams Datasheet  Page 27
+[y=450.68] 26Revision Information
+[y=463.7] 25Document Status
+[y=476.66] 23RoHS Compliant & ams Green Statement24Copyrights & Disclaimer
+[y=489.68] 22Ordering & Contact Information
+[y=515.66] 21Moisture Sensitivity
+[y=528.68] 21Storage Information
+[y=554.66] 20Soldering Information
+[y=567.68] 18Package Information
+[y=593.66] 17PCB Pad Layout
+[y=606.68] 17Application Information: Hardware
+[y=632.66] 14Integration Time
+[y=645.68] 14Principles of Operation
+[y=671.66] 10Parameter Measurement Information11Typical Characteristics
+[y=684.68] 7Electrical Characteristics
+[y=697.64] 5Pin Assignments6Absolute Maximum Ratings
+[y=710.66] 3Detailed Description
+[y=736.64] 2Block Diagram
+[y=749.66] 1Key Benefits & Features
+[y=759.86] Content Guide
+[y=762.62] 1General Description
+[y=796.1] TSL1401CL  Content Guide

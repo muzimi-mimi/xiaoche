@@ -1,0 +1,35 @@
+/* ==========================================================================
+ * PA5 用户按键：EXTI5 下降沿 -> 启动 / 停止 切换
+ *
+ * 分工（关键）：
+ *   中断回调 只置 KeyFlag 就返回，耗时 < 2us，不碰电机、不读 I2C。
+ *   主循环   消费 KeyFlag，再调 StartErect() / StopCar()。
+ *
+ * 为什么不能在中断里直接调 StartErect()：
+ *   它内部 Angle_Realign() 有 300ms 阻塞（读 MPU6050，期间关掉 TIM3 中断），
+ *   放进 ISR 会让 10ms 平衡节拍停摆 300ms，正在直立行驶的车会当场倒下。
+ *
+ * 消抖：机械按键抖动 5~20ms，窗口内重复边沿只认第一次。
+ *       EXTI5 优先级 0（与 TIM1/TIM3 同级），所以 ISR 越短越好。
+ * ========================================================================== */
+#define KEY_DEBOUNCE_MS   50      /* 按键软消抖窗口(ms) */
+
+volatile uint8_t KeyFlag = 0;     /* 1 = 有一次有效按键；主循环消费后清零 */
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+    static uint32_t KeyTick = 0;
+    uint32_t now;
+
+    if (GPIO_Pin != GPIO_PIN_5)
+    {
+        return;                   /* 本工程目前只有 PA5 走 EXTI */
+    }
+
+    now = HAL_GetTick();
+    if ((uint32_t)(now - KeyTick) >= KEY_DEBOUNCE_MS)
+    {
+        KeyTick = now;
+        KeyFlag = 1;
+    }
+}

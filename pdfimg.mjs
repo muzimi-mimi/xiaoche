@@ -1,0 +1,33 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import zlib from 'node:zlib';
+const buf = readFileSync(process.argv[2]);
+const S = buf.toString('latin1');
+const objRe = /(\d+)\s+0\s+obj\b/g;
+const matches = [];
+let m;
+while ((m = objRe.exec(S)) !== null) matches.push({ num: +m[1], at: m.index, ds: m.index + m[0].length });
+for (let i = 0; i < matches.length; i++) {
+  const cur = matches[i];
+  const end = S.indexOf('endobj', cur.ds);
+  const stop = end > 0 ? end : (i + 1 < matches.length ? matches[i + 1].at : S.length);
+  const body = S.slice(cur.ds, stop);
+  const sIdx = body.indexOf('stream');
+  if (sIdx < 0) continue;
+  const dict = body.slice(0, sIdx);
+  if (!/\/Subtype\s*\/Image/.test(dict)) continue;
+  let st = cur.ds + sIdx + 6;
+  if (buf[st] === 0x0d) st++;
+  if (buf[st] === 0x0a) st++;
+  let en = S.indexOf('endstream', st);
+  let e2 = en;
+  while (e2 > st && (buf[e2 - 1] === 0x0a || buf[e2 - 1] === 0x0d)) e2--;
+  const raw = buf.subarray(st, e2);
+  const w = /\/Width\s+(\d+)/.exec(dict)?.[1];
+  const h = /\/Height\s+(\d+)/.exec(dict)?.[1];
+  const dct = /DCTDecode/.test(dict);
+  const ext = dct ? 'jpg' : 'bin';
+  const out = `D:\\codex\\img-${cur.num}-${w}x${h}.${ext}`;
+  writeFileSync(out, raw);
+  console.log(`obj ${cur.num}: ${w}x${h} ${dct ? 'DCT' : dict.match(/\/Filter\s*\/(\w+)/)?.[1]} -> ${out} (${raw.length} bytes)`);
+  console.log('   dict:', dict.replace(/\s+/g, ' ').trim());
+}

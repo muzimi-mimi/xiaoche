@@ -1,0 +1,315 @@
+const fs = require('fs');
+const L = require('./docxlib');
+const F = require('./final.json');
+const { GMR, ANGLE, RECORD, CURR, SW } = require('./analysis.json');
+
+const n = (x, d = 2) => Number(x).toFixed(d);
+const mn = a => a.reduce((x, y) => x + y, 0) / a.length;
+const vL = RECORD.volts.filter((_, i) => RECORD.bits[i] === 0);
+const vH = RECORD.volts.filter((_, i) => RECORD.bits[i] === 1);
+const REC = {
+  vLmean: mn(vL), vHmin: Math.min(...vH), diff: Math.min(...vH) - Math.max(...vL),
+  Vth: (Math.max(...vL) + Math.min(...vH)) / 2,
+  mLow: (Math.max(...vL) + Math.min(...vH)) / 2 - Math.max(...vL),
+  mHigh: Math.min(...vH) - (Math.max(...vL) + Math.min(...vH)) / 2,
+};
+F.record = REC;
+const ch = [];
+const P = (...a) => ch.push(...a);
+
+/* ============ 封面 / 信息 ============ */
+P(L.para([{ t: '巨磁阻效应及应用  实验报告', b: 1, sz: 40, cn: '黑体' }],
+  { align: 'center', noind: true, before: 200, after: 80, sz: 40, cn: '黑体' }));
+P(L.para([{ t: 'GMR 磁阻特性 · 齿轮角位移 · 磁记录与读出 · 拓展测量', sz: 24 }], { align: 'center', noind: true, after: 260 }));
+P(L.table([
+  ['课程名称', '大学物理实验（近代物理）', '', ''],
+  ['实验名称', '巨磁阻效应及应用', '实验日期', '2026 年    月    日'],
+  ['姓名', '', '学号', ''],
+  ['同组人', '', '实验地点', ''],
+  ['指导教师', '', '成绩', ''],
+], { w: [1500, 3300, 1500, 2700], header: false, bold: [], sz: 21 }));
+P(L.para([{ t: '注：姓名、学号、日期等栏目请按实际情况填写后再提交。', sz: 18, color: '808080', i: 1 }], { noind: true, after: 200 }));
+
+/* ============ 一、实验目的 ============ */
+P(L.h1('一、实验目的'));
+[
+  '1. 理解巨磁阻（GMR）效应的物理机理，掌握 GMR 元件磁阻特性（$\\Delta R/R_0$—磁场/励磁电流）的测量方法，并测定其饱和磁阻变化率与半饱和场。',
+  '2. 学会用 GMR 梯度传感器对齿轮角位移进行非接触测量，确定输出信号的周期、幅值、灵敏度与线性范围，并由此反推齿轮齿数。',
+  '3. 了解磁记录与读出的基本原理，用 GMR 读出头完成试验磁卡的写入—读出—译码全过程，并给出判决电平与噪声容限。',
+  '4. 拓展内容（三选二）：① 用 GMR 模拟传感器测量电流，比较不同偏置磁场下的灵敏度 $S$ 与非线性度；② 测量 GMR 开关传感器的磁电转换特性，确定动作/释放阈值与磁滞回差。',
+].forEach(t => P(L.body(t)));
+
+/* ============ 二、实验仪器 ============ */
+P(L.h1('二、实验仪器'));
+[
+  'GMR 效应实验仪（含励磁电源与电磁铁、恒流源、数字电压表、GMR 测量组件、齿轮与 GMR 梯度传感器组件、磁卡与读写头组件、开关传感器组件）；连接导线若干。',
+  '说明：本实验所有数据均取自实验仪配套数据记录表中实际填写的单元格；表中未填写的栏目（如磁场 $B$、GMR 端电压 $U$、GMR 电阻 $R$）在报告中如实标注为"未记录"，不作推算或补充。',
+].forEach(t => P(L.body(t)));
+
+/* ============ 三、实验原理 ============ */
+P(L.h1('三、实验原理'));
+P(L.h2('3.1  巨磁阻效应'));
+P(L.body('巨磁阻效应由 Baibich 等人于 1988 年在 Fe/Cr 纳米多层膜中首次发现。其微观机理是自旋相关散射：铁磁层中 3d 电子被自旋极化，电子在铁磁层内及穿越界面时的散射概率取决于其自旋方向与铁磁层磁化方向的相对取向——自旋与磁化平行的多数自旋电子散射弱、平均自由程长，反平行的少数自旋电子散射强、平均自由程短，两条并联导电通道的总电阻由二者共同决定。'));
+P(L.body('当相邻铁磁层的磁化在外磁场作用下由反平行转为平行时，多数自旋通道与 minority 通道之一始终低阻，总电阻显著下降；反之电阻上升。这一随磁化相对取向改变的电阻变化即巨磁阻效应，相对变化率定义为：'));
+P(L.dm('\\frac{\\Delta R}{R_0}=\\frac{R(B)-R(0)}{R(0)}\\times 100\\%'));
+P(L.body('其中 $R(0)$ 为零磁场电阻，$R(B)$ 为磁场 $B$ 下的电阻。作为对比，传统坡莫合金的各向异性磁阻（AMR）通常仅 $2\\,\\%\\sim5\\,\\%$，而 GMR 可达百分之几十，因此 GMR 更适合弱磁场、高灵敏度的位置与电流检测。'));
+P(L.h2('3.2  GMR 传感器的三种应用方式'));
+P(L.body('（1）梯度（差分）模式：将两片 GMR 元件接成半桥并置于磁场梯度中。齿轮齿顶与齿谷到传感器的距离不同，使两元件电阻反向变化，桥路输出正比于磁场梯度而非磁场本身，因而对均匀杂散磁场具有共模抑制能力，适合转速与角位移测量。'));
+P(L.body('（2）开关模式：GMR 元件后接施密特触发器，输出只有高、低两种电平。由于磁滞与正反馈的引入，磁场增大与减小时的翻转点不重合，形成动作点与释放点之间的回差（迟滞），可防止输出在阈值附近抖动。'));
+P(L.body('（3）磁记录与读出：写入磁头将二进制位以局部磁化方向的形式记录在磁卡上；GMR 读出头经过磁化区时感受其杂散场，磁阻变化经桥路转换为高、低电平输出，从而还原写入的信息。'));
+P(L.h2('3.3  励磁电流与磁场的关系'));
+P(L.body('电磁铁气隙中的磁场由安培环路定律决定。在未进入铁芯饱和的区域，磁感应强度与励磁电流近似成正比：'));
+P(L.dm('B = kI \\quad (k \\text{ 为气隙磁场比例系数})'));
+P(L.body('因此本实验直接以励磁电流 $I$ 作为磁场的标度。由于本次记录表中磁场 B 一列未填写、仪器 B—I 标定曲线亦未记录，报告中所有"磁场"量均以 I（mA）表示，不与 mT 换算。'));
+
+/* ============ 四、内容与步骤 ============ */
+P(L.h1('四、实验内容与步骤'));
+const steps = [
+  ['4.1  GMR 磁阻特性测量', [
+    '① 按实验仪面板示意连接线路，GMR 测量组件接入测量回路，励磁电流调零。',
+    '② 正向测量：将励磁电流由 +100 mA 逐档（10 mA）减小至 0，每档读取一次 GMR 响应并记录。',
+    '③ 反向测量：极性不变继续由 0 调至 −100 mA（恒流源单方向连续可调，不得回调，以减小标定不重复带来的误差），逐档记录。',
+    '④ 回程测量：由 −100 mA 逐档增大，经 0 至 +100 mA，逐档记录，与下降段构成闭合扫描。',
+    '⑤ 以零磁场读数为参考 $X_0$，按 $\\Delta X/X_0$ 计算相对磁阻变化率。',
+  ]],
+  ['4.2  GMR 梯度传感器测量齿轮角位移', [
+    '① 实验仪 4 V 电压源接组件"巨磁电阻供电"，组件"信号输出"接实验仪电压表。',
+    '② 逆时针转动齿轮，取输出电压为零的位置为起始角度 $\\theta = 0^\\circ$。',
+    '③ 每转过 3° 记录一次角度与输出电压，累计转动 48°，共 17 个数据点。',
+    '④ 以 θ 为横坐标、U 为纵坐标绘制 U—θ 曲线，并由曲线周期反推齿轮齿数。',
+  ]],
+  ['4.3  GMR 传感器试验磁记录与读出', [
+    '① 用写入磁头沿磁卡运动方向依次在 8 个区域写入二进制位（本次写入 00110011）。',
+    '② 将磁卡通过 GMR 读出头，逐区读出电压值。',
+    '③ 以高、低电平的中点为判决阈值，将读出的模拟电平还原为二进制，与写入位逐一比对。',
+  ]],
+  ['4.4  拓展一：GMR 模拟传感器测量电流', [
+    '① 实验仪电压源、恒流源分别接对应接口，信号输出端接电压表。',
+    '② 低磁偏置校准：待测电流调 0，调节磁铁位置使输出约 25 mV。',
+    '③ 待测电流由 300 mA 逐档减小至 0，过零后交换极性测 −100、−200、−300 mA，记录各点输出电压。',
+    '④ 重新校准使输出约 150 mV（适当偏置），重复上述测量。',
+    '⑤ 分别绘制两种偏置下的 U—I 曲线，比较灵敏度与非线性度。',
+  ]],
+  ['4.5  拓展二：GMR 开关传感器磁电转换特性', [
+    '① 恒流源只能单方向连续调节，不可回调；到达 0 后交换极性再继续，避免磁滞误差。',
+    '② 按四个半周依次扫描：+50→0、0→−50、−50→0、0→+50，沿电流方向逐格（10 mA）调节。',
+    '③ 观察输出电平翻转，在翻转发生的那一格记下励磁电流即为阈值；四个半周共得两个动作点与两个释放点。',
+    '④ 以励磁电流为横坐标、输出电平为纵坐标绘制磁滞回线，计算回差宽度。',
+  ]],
+];
+steps.forEach(([t, arr]) => { P(L.h2(t)); arr.forEach(s => P(L.body(s))); });
+
+/* ============ 五、数据记录与处理 ============ */
+P(L.h1('五、数据记录与处理'));
+
+/* ---- 5.1 ---- */
+P(L.h2('5.1  GMR 磁阻特性测量'));
+P(L.body('原始记录表中"磁场 $B/\\mathrm{mT}$""GMR 端电压 $U/\\mathrm{mV}$""GMR 电阻 $R/\\Omega$""相对磁阻变化率 $\\Delta R/R_0$"四列均为空白，仅 E 列"GMR 电流 $I_{\\mathrm{GMR}}/\\mathrm{mA}$"逐点填写，故本节以该列读数 $X$ 作为 GMR 的响应量。'));
+P(L.body('需要说明的是：该读数随 $|I|$ 增大而单调增大，即随磁场增大而增大。若 GMR 由恒压源供电，则电流应随磁阻增大而减小，与实测趋势相反；只有在恒流驱动（响应量与 R 同向变化）的情形下，实测趋势才与 GMR 的正磁阻效应一致。因此按 $\\Delta R/R_0=(X-X_0)/X_0$ 归一化处理，其中 $X_0$ 为零磁场读数。'));
+P(L.para([{ t: '零磁场参考点：下降段 $X_0(I=0)=1.594$，上升段 $X_0^{\\prime}(I=0)=1.596$，两者相差 0.002，即 0.13 %。', b: 1 }], { noind: true, before: 60, after: 120 }));
+
+const rows = [['$|I|\\,\\mathrm{/mA}$', '下降段读数 $X$', '上升段读数 $X$', '下降段 $\\Delta R/R_0\\,\\/%$', '上升段 $\\Delta R/R_0\\,\\/%$', '$X_{\\text{下}}-X_{\\text{上}}$']];
+const X0 = F.gmr.X0, pc = v => n((v - X0) / X0 * 100, 2);
+const getP = (I) => F.gmr.pairs.find(p => p.I === I);
+rows.push(['0', '1.594', '1.596', '0.00', pc(1.596), n(1.594 - 1.596, 3)]);
+for (let a = 100; a >= 10; a -= 10) { const p = getP(a), q = getP(-a); rows.push(['+' + a, n(p.down, 3), n(p.up, 3), pc(p.down), pc(p.up), n(p.d, 3)]); }
+for (let a = 10; a <= 100; a += 10) { const p = getP(-a); rows.push(['−' + a, n(p.down, 3), n(p.up, 3), pc(p.down), pc(p.up), n(p.d, 3)]); }
+P(L.para([{ t: '表 1  GMR 磁阻特性四段扫描数据（下降段＝①②，上升段＝③④）', b: 1 }], { align: 'center', noind: true, before: 120, after: 60 }));
+P(L.table(rows, { w: [1300, 1600, 1600, 1750, 1750, 1300], sz: 19 }));
+P(L.image('fig1.png', 15.2));
+P(L.image('fig2.png', 15.2));
+P(L.body(`由图 1、图 2 可读出以下特征量：零磁场响应量最小，随 $|I|$ 增大迅速上升，在 $|I|\\approx 70\\ \\mathrm{mA}$ 之后明显变缓并趋于饱和，是典型的巨磁阻饱和曲线。全量程最大相对变化率出现在 +100 mA 处，为 ${F.gmr.maxMR} %；负向 $-100\\ \\mathrm{mA}$ 处为 ${pc(1.813)} %，正负两侧最大值的相对偏差不足 1.4 %，说明磁路左右对称性良好。`));
+P(L.body(`取 $\\Delta R/R_0$ 为最大值的二分之一（${n(F.gmr.maxMR / 2, 2)} %）反插值，得半饱和励磁电流 $I_{1/2}\\approx ${F.gmr.Ihalf}\\ \\mathrm{mA}$。低场区（0→30 mA）平均变化率为 ${F.gmr.s30.toExponential(2)} /mA，高场区（70→100 mA）降至 ${F.gmr.s100.toExponential(2)} /mA，相差约 ${n(F.gmr.s30 / F.gmr.s100, 0)} 倍，表明在 $|I|>70\\ \\mathrm{mA}$ 后磁化接近饱和，继续增大磁场对电阻的贡献已很小。`));
+const mh = F.gmr.maxH;
+P(L.body(`磁滞方面：在同一 $|I|$ 处比较下降段与上升段读数，最大偏差为 ${n(mh.d, 3)}（出现在 $|I|=${Math.abs(mh.I)}\\ \\mathrm{mA}$），折合零磁场参考值的 ${n(mh.pct, 2)} %。该偏差并非在各电流点均匀分布，而是集中在曲线斜率最大的中场区（30～60 mA），在低场端与饱和区都明显变小——这一分布特征更符合"励磁电流—磁场标定不重复、探头或磁卡位置微动"被陡峭的 $\\mathrm{d}X/\\mathrm{d}I$ 放大，而不是 GMR 材料本身的大磁滞。正负两侧同 $|I|$ 读数的最大不对称量为 ${n(F.gmr.maxS.d, 3)}（$|I|=${F.gmr.maxS.I}\\ \\mathrm{mA}$），约 ${n(F.gmr.maxS.d / X0 * 100, 2)} %，可视为电磁铁剩磁与接线接触电阻的综合影响。`));
+P(L.para([{ t: `结论：本次测得 GMR 元件的相对磁阻变化率 $\\Delta R/R_0\\approx ${F.gmr.maxMR}\\,\\%$，半饱和励磁电流 $I_{1/2}\\approx ${F.gmr.Ihalf}\\ \\mathrm{mA}$，扫描回线最大偏差 ${n(mh.pct, 2)} % FS。`, b: 1 }], { noind: true, before: 80, after: 120 }));
+
+/* ---- 5.2 ---- */
+P(L.h2('5.2  GMR 梯度传感器测量齿轮角位移'));
+const A = F.angle.keep, T = F.angle.T;
+const pred = t => A.off + A.A * Math.sin(2 * Math.PI * t / T + A.ph);
+const ar = [['次数', 'θ / (°)', 'U 实测 / mV', '模型值 / mV', '残差 / mV', '备注']];
+ANGLE.forEach((d, i) => ar.push([String(i + 1), String(d[0]), n(d[1], 1), n(pred(d[0]), 1), n(d[1] - pred(d[0]), 1),
+  d[0] === 0 ? '起始点（调零）' : (d[0] === 27 || d[0] === 45 ? '离群点，拟合时剔除' : (Math.abs(d[1]) > 55 ? '极值点' : ''))]));
+P(L.para([{ t: '表 2  角位移原始数据与正弦模型拟合结果', b: 1 }], { align: 'center', noind: true, before: 120, after: 60 }));
+P(L.table(ar, { w: [900, 1150, 1500, 1500, 1400, 1900], sz: 19 }));
+P(L.image('fig3.png', 15.2));
+P(L.body(`周期确定：输出电压的四个极值点分别位于 $\\theta=6^\\circ,18^\\circ,30^\\circ,42^\\circ$，相邻极值间隔恒为 12°，即半周期 $T/2=12^\\circ$，故信号周期 $T=24^\\circ$。这一结果由极值位置直接给出，不依赖任何拟合假设，因而最可靠。由齿轮每转过一个齿距输出变化一个周期，得齿数 $N=\\dfrac{360^\\circ}{T}=\\dfrac{360^\\circ}{24^\\circ}=${F.angle.teeth}$。`));
+P(L.body(`幅值：四个极值的绝对值平均为 ${F.angle.extMean} mV，峰—峰值 ${F.angle.ptp} mV，两次正向峰值（57.3、57.2 mV）与两次负向峰值（−56.5、−55.4 mV）重复性很好，说明齿轮转动平稳、传感器输出一致。`));
+P(L.body(`拟合：以 T = 24° 固定、形式为 $U(\\theta)=U_0+A\\sin(2\\pi\\theta/T+\\varphi)$ 的基波模型作最小二乘。使用全部 17 点时 $A=${F.angle.all.A}\\ \\mathrm{mV}$、$U_0=${F.angle.all.off}\\ \\mathrm{mV}$、$R^2=${n(F.angle.all.r2,4)}$、最大残差 ${F.angle.all.maxRes} mV；剔除 $\\theta=27^\\circ,45^\\circ$ 两点后 $A=${n(A.A,2)}\\ \\mathrm{mV}$、$U_0=${n(A.off,2)}\\ \\mathrm{mV}$、$R^2=${n(A.r2,4)}$、残差均方根 ${n(A.rms, 2)} mV、最大残差 ${n(A.maxRes, 2)} mV，拟合质量显著提高。`));
+P(L.body(`离群点判定：$\\theta=27^\\circ$ 实测 0 mV、$\\theta=45^\\circ$ 实测 −1.1 mV，而模型预测分别为 ${n(F.angle.pred27, 1)} mV 与 ${n(F.angle.pred45, 1)} mV，偏离约 0.7 倍幅值，远大于其余各点的 11.5 mV 上限，故判为离群。值得注意的是，两点的实测值都恰为"接近零输出"，而剔除后模型的过零点位于 $11.89^\\circ+k\\cdot12^\\circ$，即 23.89° 与 47.89°——与记录角度相差约 3°（恰好一个采样步长）。这提示最可能的原因是转齿时多计或少计一格（或齿轮存在回程间隙），也可能是该两点处电压表被重新调零。建议复测该两点。`));
+P(L.body(`特性参量：过零处最大斜率（即角位移灵敏度）为 $\\left.\\dfrac{\\mathrm{d}U}{\\mathrm{d}\\theta}\\right|_{\\max}=\\dfrac{2\\pi A}{T}=${F.angle.S_max}\\ \\mathrm{mV/^\\circ}$；按 $|\\sin x-x|\\le 5\\,\\%$ 判据，过零附近 ±${F.angle.linHalfDeg}° 内输出与角度近似线性，占一个齿距（$24^\\circ$）的 ${n(F.angle.linHalfDeg / 24 * 100, 1)} %。实际角分辨率受拟合残差限制，为 ${n(A.rms, 2)} mV ÷ ${F.angle.S_max} mV/° ≈ ${F.angle.resPractical}°；若仅按 0.1 mV 的电压表分辨率估算，理论可达 ${F.angle.resIdeal}°，说明系统的真正限制在机械角度重复性与传感器噪声，而非电表读数。`));
+P(L.para([{ t: `结论：GMR 梯度传感器输出为周期 ${T}°、峰—峰值 ${F.angle.ptp} mV 的近正弦信号，对应齿轮 ${F.angle.teeth} 齿；过零灵敏度 ${F.angle.S_max} mV/°，线性区 ±${F.angle.linHalfDeg}°，实用角分辨率约 ${F.angle.resPractical}°。`, b: 1 }], { noind: true, before: 80, after: 120 }));
+
+/* ---- 5.3 ---- */
+P(L.h2('5.3  GMR 传感器试验磁记录与读出'));
+const rr = [];
+rr.push(['磁卡区域号', '1', '2', '3', '4', '5', '6', '7', '8']);
+rr.push(['写入二进制', ...RECORD.bits.map(String)]);
+rr.push(['读出电平 / V', ...RECORD.volts.map(v => n(v, 3))]);
+rr.push(['判读电平', ...RECORD.volts.map(v => v > 0.965 ? '高' : '低')]);
+rr.push(['译码结果', ...RECORD.volts.map(v => String(v > 0.965 ? 1 : 0))]);
+rr.push(['与写入比对', ...RECORD.volts.map((v, i) => (v > 0.965 ? 1 : 0) === RECORD.bits[i] ? '一致' : '错误')]);
+P(L.para([{ t: '表 3  磁卡 8 区域写入—读出—译码结果', b: 1 }], { align: 'center', noind: true, before: 120, after: 60 }));
+P(L.table(rr, { w: [1900, 900, 900, 900, 900, 900, 900, 900, 900], sz: 19 }));
+P(L.image('fig4.png', 15.2));
+P(L.body(`低电平 4 位（区域 1、2、5、6）读出 0.002～0.003 V，平均 ${n(F.record.vLmean, 4)} V；高电平 4 位（区域 3、4、7、8）读出均为 ${n(F.record.vHmin, 3)} V。两组电平差 ${n(F.record.diff, 3)} V，是典型的开关式数字输出而非模拟量。`));
+P(L.body(`取判决电平为两组之间的中点 $V_{\\mathrm{th}}=${n(F.record.Vth,3)}\\ \\mathrm{V}$，则下侧噪声容限 ${n(F.record.mLow, 3)} V、上侧噪声容限 ${n(F.record.mHigh, 3)} V，各约占电平差的 $50\\,\\%$，说明读出信号的高、低电平分离度极好，抗干扰裕量充足。按此阈值译码得到 00110011，与写入序列完全一致，8 位误码数为 0。写入位 00110011 对应十六进制 0x33、十进制 51。`));
+P(L.body(`需要指出：高电平 ${n(F.record.vHmin, 3)} V 已接近实验仪 2 V 量级的供电上限，输出可能已进入饱和段，因此"高电平一致性"部分反映的是输出级钳位而非磁阻线性响应；若需评估读出信号的模拟质量，应改用未饱和的桥式输出并测量眼图/边沿。此外 8 位全对只能给出误码率的 95 % 置信上限约为 $p_{95}\\approx 3/n=3/8=37.5\\,\\%$（"三法则"），样本量过小，不能据此宣称系统无误码。`));
+P(L.para([{ t: '结论：GMR 读出头能正确还原磁卡上写入的 8 位二进制信息，译码结果 00110011 与写入完全一致，判决阈值 0.965 V，噪声容限约 ±0.96 V。', b: 1 }], { noind: true, before: 80, after: 120 }));
+
+/* ---- 5.4 ---- */
+P(L.h2('5.4  拓展一：GMR 模拟传感器测量电流'));
+const cr = [['待测电流 I / mA', ...CURR.I.map(String)],
+['低偏置输出 U / mV', ...CURR.low.map(v => n(v, 1))],
+['  低偏置拟合值 / mV', ...CURR.I.map(I => n(F.current.low.U0 + F.current.low.S * I, 2))],
+['  低偏置残差 / mV', ...F.current.low.res.map(v => n(v, 3))],
+['适当偏置输出 U / mV', ...CURR.high.map(v => n(v, 1))],
+['  适当偏置拟合值 / mV', ...CURR.I.map(I => n(F.current.high.U0 + F.current.high.S * I, 2))],
+['  适当偏置残差 / mV', ...F.current.high.res.map(v => n(v, 3))]];
+P(L.para([{ t: '表 4  两种偏置下的输出电压—待测电流数据及线性拟合', b: 1 }], { align: 'center', noind: true, before: 120, after: 60 }));
+P(L.table(cr, { w: [2400, 950, 950, 950, 950, 950, 950, 950], sz: 19, bold: [] }));
+P(L.image('fig5.png', 15.2));
+const cmp = [['参量', '低偏置（校准 ≈25 mV）', '适当偏置（校准 ≈150 mV）'],
+['灵敏度 $S=\\mathrm{d}U/\\mathrm{d}I$', `${n(F.current.low.S * 1000, 2)} µV/mA`, `${n(F.current.high.S * 1000, 2)} µV/mA`],
+['零电流输出 $U(0)$ 实测', `${n(F.current.low.U0, 3)} mV`, `${n(F.current.high.U0, 3)} mV`],
+['线性相关系数 $R^2$', n(F.current.low.r2, 5), n(F.current.high.r2, 5)],
+['最大残差 / 拟合 rms', `${n(F.current.low.maxdev, 3)} / ${n(F.current.low.rms, 3)} mV`, `${n(F.current.high.maxdev, 3)} / ${n(F.current.high.rms, 3)} mV`],
+['满量程输出跨度', `${n(F.current.low.span, 1)} mV`, `${n(F.current.high.span, 1)} mV`],
+['非线性度（最大残差/满量程）$\\delta_{\\mathrm{NL}}$', `${n(F.current.low.nl, 2)} % FS`, `${n(F.current.high.nl, 2)} % FS`],
+['按 $0.1\\ \\mathrm{mV}$ 表分辨率的可辨电流', `${n(0.1 / F.current.low.S, 2)} mA`, `${n(0.1 / F.current.high.S, 2)} mA`]];
+P(L.para([{ t: '表 5  两种偏置条件下磁电转换特性对比', b: 1 }], { align: 'center', noind: true, before: 140, after: 60 }));
+P(L.table(cmp, { w: [3400, 2800, 2800], sz: 20, left: [0] }));
+P(L.body(`两条 $U$—$I$ 直线的相关系数均大于 0.997，在 ±300 mA 范围内线性良好。适当偏置下的灵敏度 $S=${n(F.current.high.S*1000,2)}\\ \\mu\\mathrm{V/mA}$ 是低偏置 $S=${n(F.current.low.S*1000,2)}\\ \\mu\\mathrm{V/mA}$ 的 ${n(F.current.high.S / F.current.low.S, 3)} 倍，验证了"施加合适的偏置磁场可使 GMR 工作点移到磁阻曲线斜率最大的区段，从而提高灵敏度"这一结论。`));
+P(L.body(`代价是线性度略有下降：非线性度由 ${n(F.current.low.nl, 2)} % FS 增至 ${n(F.current.high.nl, 2)} % FS。两种偏置的残差符号分布一致（低端为负、中段为正、高端为负），呈系统性的弯曲而非随机散布，说明这是 GMR 磁阻曲线本身非线性经线性化后留下的形状误差，可通过分段拟合或查表校正消除。`));
+P(L.body(`零点校准情况需要说明：低偏置时实测零电流输出 $U(0)=${n(F.current.low.U0,2)}\\ \\mathrm{mV}$，与"约 25 mV"的校准目标相符（偏差 +${n(F.current.low.U0 - 25, 2)} mV）；适当偏置时实测 $U(0)=${n(F.current.high.U0,2)}\\ \\mathrm{mV}$，与"约 150 mV"的目标相差 ${n(F.current.high.U0 - 150, 2)} mV，即该偏置点的校准并未真正调到设定值。这不影响灵敏度与非线性度的比较（二者均由同一条数据的相对关系给出），但会使两组的绝对输出电平不可直接比较，报告中原样保留实测值。`));
+P(L.para([{ t: `结论：低偏置 $S=${n(F.current.low.S*1000,2)}\\ \\mu\\mathrm{V/mA}$、$\\delta_{\\mathrm{NL}}=${n(F.current.low.nl,2)}\\,\\%\\ \\mathrm{FS}$；适当偏置 $S=${n(F.current.high.S*1000,2)}\\ \\mu\\mathrm{V/mA}$、$\\delta_{\\mathrm{NL}}=${n(F.current.high.nl,2)}\\,\\%\\ \\mathrm{FS}$。偏置磁场提高灵敏度约 ${n((F.current.high.S / F.current.low.S - 1) * 100, 1)} %，同时线性度略有牺牲。`, b: 1 }], { noind: true, before: 80, after: 120 }));
+
+/* ---- 5.5 ---- */
+P(L.h2('5.5  拓展二：GMR 开关传感器磁电转换特性'));
+const swt = [['特征点', '对应扫描阶段', '阈值电流 $|I|\\,\\mathrm{/mA}$', '实际电流 $\\mathrm{/mA}$', '输出翻转'],
+['正向释放点', '一、+50 → 0', n(SW.release_pos, 1), '+' + n(SW.release_pos, 1), '高 → 低'],
+['负向动作点', '二、0 → −50', n(SW.operate_neg, 1), '−' + n(SW.operate_neg, 1), '低 → 高'],
+['负向释放点', '三、−50 → 0', n(SW.release_neg, 1), '−' + n(SW.release_neg, 1), '高 → 低'],
+['正向动作点', '四、0 → +50', n(SW.operate_pos, 1), '+' + n(SW.operate_pos, 1), '低 → 高']];
+P(L.para([{ t: '表 6  开关传感器磁滞回线四个阈值（取自记录表汇总区）', b: 1 }], { align: 'center', noind: true, before: 120, after: 60 }));
+P(L.table(swt, { w: [1700, 1900, 1900, 1500, 1500], sz: 20 }));
+P(L.image('fig6.png', 15.2));
+P(L.body(`逐格记录区仅有两个电平格填有数值：阶段一 $I=+10\\ \\mathrm{mA}$ 处为"低"，阶段二 $I=-20\\ \\mathrm{mA}$ 处为"高"。二者与汇总区阈值自洽——$+10<15.4\\ \\mathrm{mA}$ 低于正向释放点故输出为低，$|-20|>18.5\\ \\mathrm{mA}$ 超过负向动作点故输出为高，可交叉验证四个阈值的记录无误。`));
+P(L.body(`由四个阈值可得磁滞回线的几何参量：正向回差 $\\Delta I_{\\mathrm{h}}=I_{\\mathrm{op}}-I_{\\mathrm{re}}=${n(SW.operate_pos,1)}-${n(SW.release_pos,1)}=${n(SW.operate_pos - SW.release_pos,2)}\\ \\mathrm{mA}$；负向回差 $\\Delta I_{\\mathrm{h}}=${n(SW.operate_neg,1)}-${n(SW.release_neg,1)}=1.80\\ \\mathrm{mA}$；两侧平均回差 $\\overline{{\\Delta I_{\\mathrm{h}}}}=2.75\\ \\mathrm{mA}$。动作点平均 ${n((SW.operate_pos + SW.operate_neg) / 2, 2)} mA，释放点平均 ${n((SW.release_pos + SW.release_neg) / 2, 2)} mA，回线中心约 ${n(((SW.operate_pos + SW.operate_neg) / 2 + (SW.release_pos + SW.release_neg) / 2) / 2, 3)} mA。`));
+P(L.body(`两侧回差不相等（3.70 mA 对 1.80 mA，相差 1.90 mA），而动作点两侧（19.1 与 18.5 mA）却相当接近。回差的不一致主要来自释放点：正向释放 15.4 mA 明显低于负向释放 16.7 mA。这一现象与电磁铁剩磁方向有关——扫描起点为 +50 mA 时磁路剩磁与外场同向，需撤到更低的励磁电流才能使场降到释放阈值，因而正向释放点被"拉长"。另外，逐格调节的步长为 10 mA，而阈值记到 0.1 mA，实际阈值的不确定度应由步长决定，约为 $\\pm5\\ \\mathrm{mA}$（均匀分布时标准不确定度 $u=\\dfrac{5}{\\sqrt{3}}\\approx 2.9\\ \\mathrm{mA}$），该量级已足以解释两侧回差的差异，因此不宜把 1.90 mA 的差值当作真实的物理不对称。`));
+P(L.body(`回差的工程意义：开关传感器的工作点一旦进入回差区间，输出状态由历史决定，形成施密特触发特性，可有效抑制齿轮边缘抖动与电磁干扰造成的误翻转；代价是牺牲了位置检测的重复精度，回差越大死区越宽。若应用需要更窄的死区，应减小磁滞或改用线性（梯度）模式配合外部比较器。`));
+P(L.para([{ t: '结论：GMR 开关传感器的动作阈值约 ±18.8 mA、释放阈值约 ±16.1 mA，正向回差 3.70 mA、负向回差 1.80 mA、平均回差 2.75 mA，呈典型施密特磁滞特性。', b: 1 }], { noind: true, before: 80, after: 120 }));
+
+/* ============ 六、误差分析 ============ */
+P(L.h1('六、误差分析与讨论'));
+[
+  ['（1）磁场标定的缺失是本次最主要的系统限制。', '记录表中 $B$、$U$、$R$ 三列未填写，仪器的 $B$—$I$ 标定曲线亦未记录，因此全部磁学结果只能以励磁电流 $I$ 为标度，$\\Delta R/R_0$ 是由响应量相对零磁场归一化得到的，无法给出绝对电阻值与真实磁场下的饱和场。这是数据处理上必须承认的前提，而非测量误差。'],
+  ['（2）零点与剩磁。', 'GMR 特性扫描中，$I=0$ 处下降段读数 1.594、上升段读数 1.596，相差 0.002（0.13 %）。电磁铁在电流归零后仍有剩磁，故"零磁场"并非真正的 B = 0，这会使 $\\Delta R/R_0$ 略微低估。若要求更高精度，应在测量前对电磁铁交流退磁。'],
+  ['（3）磁滞与扫描路径。', '四段扫描构成闭合回线，同 $|I|$ 处下降段与上升段最大偏差 0.023，折合 1.44 %。偏差集中在 $\\mathrm{d}X/\\mathrm{d}I$ 最大的中场区（30～60 mA），在低场与饱和区都很小，符合"电流—磁场标定不重复"被陡峭响应放大的特征。实验要求恒流源单方向连续调节、不得回调，正是为了消除这种路径依赖。'],
+  ['（4）读数分辨率与量化误差。', 'GMR 响应量记录到 0.001，相对 $X_0$ 的量化误差约 $\\pm0.03\\,\\%$，远小于磁滞偏差，不是主要误差源。角位移电压记录到 0.1 mV、测电流记录到 0.1 mV，对应非线性度 2.0 %～3.1 % FS 的拟合残差中，电表量化贡献约 0.05 mV，可忽略，残差主要来自 GMR 本身的非线性。'],
+  ['（5）角位移的机械误差与离群点。', '每 3° 取一点，角度分度误差直接映射为电压误差；在过零附近灵敏度 $15.22\\ \\mathrm{mV/^\\circ}$，$3^\\circ$ 的错位可造成约 $15.22\\times3\\approx45\\ \\mathrm{mV}$ 偏差。$\\theta=27^\\circ,45^\\circ$ 两点的实测值恰好落在模型过零位置（相差约一格 3°），最可能是齿数计数错位或回程间隙所致。剔除这两点后 $R^2$ 由 0.858 升至 0.977，说明其余 15 点的一致性是好的。'],
+  ['（6）开关阈值的分辨能力受步长限制。', '逐格调节步长 10 mA，阈值虽记录到 0.1 mA，其真实不确定度仍由步长决定（±5 mA，标准不确定度约 2.9 mA）。因此两侧回差 3.70 mA 与 1.80 mA 之差（1.90 mA）小于该不确定度，不应解释为物理不对称。'],
+  ['（7）磁记录样本量不足。', '8 位全对只能给出误码率 95 % 置信上限约 37.5 %（三法则），且高电平 1.928 V 已接近输出级上限，可能存在钳位。要评估读出通道质量，需增加写入位数量并测量电平分布的标准差。'],
+  ['（8）偏置点校准偏差。', '测电流实验中"适当偏置"设定为约 150 mV，实测零电流输出 129.36 mV，偏差 −20.6 mV，说明校准未到位。两组灵敏度仍可比较（各自取自同一条数据的斜率），但绝对输出电平不可跨组比较。'],
+].forEach(([a, b]) => P(L.para([{ t: a, b: 1 }, { t: b }], {}), ));
+P(L.para([{ t: '综合评估：', b: 1 }, { t: '本实验各任务的重复性误差不超过约 $1.5\\,\\%$（GMR 特性）、$0.4^\\circ$（角位移）、$3.1\\,\\%\\ \\mathrm{FS}$（测电流线性度），足以支撑定性结论与参量测定；受限于磁场标定缺失与开关阈值步长，涉及绝对磁场的量与回差的细微不对称不宜作定量结论。' }], { before: 100 }));
+
+/* ============ 七、总结与思考 ============ */
+P(L.h1('七、实验总结与思考'));
+[
+  ['总结一：GMR 的磁阻曲线呈典型饱和形，本次测得 $\\Delta R/R_0\\approx 13.9\\,\\%$。', '半饱和励磁电流约 31 mA，超过 70 mA 后曲线几乎平坦（斜率下降约 35 倍）。这说明 GMR 传感器的工作点必须选在低场陡峭区，把元件用在饱和段只会浪费灵敏度。'],
+  ['总结二：梯度模式给出周期信号，可直接反推机械结构参数。', '角位移输出为周期 24°、峰—峰值 113.8 mV 的近正弦波，由周期唯一确定齿数 $N=360/24=15$。这正是 GMR 转速/角度传感器在 automotive 与工业编码器中被广泛使用的原因：无需接触、无需光学窗口，且周期信号本身即携带位置信息。'],
+  ['总结三：开关模式与线性模式是两种不同的取舍。', '开关传感器带回差（本次平均 2.75 mA），输出只有两种电平，判决简单、抗抖动，但丢失了位置细节；梯度/模拟传感器输出连续，可分辨 $0.4^\\circ$ 级的角度变化，却需要额外的比较器与线性化。选择依据是应用需要"有无"还是"多少"。'],
+  ['总结四：偏置磁场是 GMR 模拟传感器的核心调节手段。', '从低偏置到适当偏置，灵敏度提高 18 %（15.46→18.25 µV/mA），代价是非线性度由 2.00 % FS 增至 3.12 % FS。实际设计中应通过桥式结构（全桥差分）在提高灵敏度的同时抵消偶次非线性项，而不是单纯增大偏置。'],
+  ['思考 1：为什么恒流源必须单方向连续调节、不可回调？', '因为电磁铁磁路与 GMR 元件都存在磁滞，回调会使同一电流设定值对应两个不同的实际磁场（路径依赖）。单向扫描 + 极性交换可保证每一段内 I 与 B 一一对应，下降段与上升段的差值才真正反映磁滞而非操作误差。'],
+  ['思考 2：为什么梯度（差分）结构能抑制均匀杂散磁场？', '两片 GMR 处于同一桥臂相邻位置，均匀磁场对二者造成同向、等量的电阻变化，在桥路中以共模形式相消；只有磁场梯度（如齿轮齿顶与齿谷的距离差）才使两元件反向变化，输出为差模信号。这也是 GMR 编码器能在强电机杂散场环境中工作的原因。'],
+  ['思考 3：GMR 与 AMR、TMR 的取舍。', 'AMR 磁阻变化率小（2 %～5 %）但工艺成熟、线性好；GMR 达百分之几十，适合中等灵敏度非接触检测；TMR 变化率最高（可超过 100 %）、功耗低，但对外界应力与温度更敏感。本实验测得的 13.9 % 属于教学级 GMR 元件的典型量级，低于商用读出头的器件水平，主要受薄膜材料与退火工艺限制。'],
+  ['思考 4：本次实验可改进之处。', '① 记录 $B$—$I$ 标定曲线，使结果可用 mT 表述；② 角位移测量时加密步长至 1°～2° 并双向复测，以定位计数错格；③ 开关阈值改用 1 mA 细调或连续扫描采集，把回差不确定度降到远小于回差本身；④ 磁记录增加至 32 位以上，给出真实的误码率与电平分布。'],
+].forEach(([a, b]) => P(L.para([{ t: a, b: 1 }, { t: b }])));
+
+/* ============ 八、完整性说明 ============ */
+P(L.h1('八、原始数据完整性说明'));
+[
+  '本报告的全部数值均取自五张数据记录表中实际填写的单元格，未填写的栏目一律标注"未记录"，未作任何补充或推算。',
+  '① GMR 巨磁阻特性表：仅 E 列"GMR 电流 $I_{\\mathrm{GMR}}/\\mathrm{mA}$"填写完整（43 个数据点）；B（磁场）、D（端电压）、F（电阻）、G（$\\Delta R/R_0$）四列空白。报告以 E 列为响应量归一化求 $\\Delta R/R_0$，并说明了该响应量与电阻同向的物理依据。',
+  '② 角位移表：17 个数据点完整。第 2 行（$\\theta=3^\\circ$）的备注列出现孤立数字"112"，与电压列的 33 mV 并存；因该值远超信号峰峰值 113.8 mV 的合理范围且无法解释，报告按电压列取值 33 mV，备注内容不计入数据。',
+  '③ 磁记录表：8 个区域的写入位与读出电平完整，无缺失。',
+  '④ 测电流表：两行各 7 个数据点完整。"适当偏置"校准目标为约 150 mV，实测零点 129.36 mV，偏差已在正文如实指出。',
+  '⑤ 开关传感器表：逐格记录区 26 行中仅 2 格填有电平（+10 mA→低，−20 mA→高），四个阈值取自下方汇总区（15.4 / 18.5 / 16.7 / 19.1 mA）。报告用这 2 个电平格对阈值作了自洽性检验。',
+].forEach(t => P(L.body(t)));
+
+/* ============ 附录 ============ */
+P(L.h1('附录 A  答辩 PPT 结构建议'));
+[
+  '第 1 页 封面：题目、姓名学号、同组人、日期。',
+  '第 2 页 原理一页讲清：自旋相关散射示意图 + 平行/反平行两态电阻对比 + $\\Delta R/R_0$ 定义式。',
+  '第 3 页 实验装置与四项任务总览（一张流程图，避免堆文字）。',
+  '第 4 页 磁阻特性：放图 1、图 2，只报三个数——$\\Delta R/R_0=13.9\\,\\%$、$I_{1/2}\\approx31.4\\ \\mathrm{mA}$、回线偏差 $1.44\\,\\%\\ \\mathrm{FS}$。',
+  '第 5 页 角位移：放图 3，强调"由极值位置定周期 $24^\\circ$ → 齿数 $15$"这一不依赖拟合的判据，并主动说明两个离群点的成因分析。',
+  '第 6 页 磁记录：放图 4，给出判决电平 $V_{\\mathrm{th}}=0.965\\ \\mathrm{V}$、噪声容限 $\\pm0.96\\ \\mathrm{V}$、译码 00110011 全对。',
+  '第 7 页 拓展一：放图 5 与表 5，落点是"偏置换灵敏度、牺牲线性度"的取舍。',
+  '第 8 页 拓展二：放图 6，给出动作/释放阈值与平均回差 2.75 mA，说明回差的抗抖动意义。',
+  '第 9 页 误差分析：只讲三条主线——磁场标定缺失、单向扫描的原因、开关阈值受步长限制。',
+  '第 10 页 总结与改进：四条结论 + 四条改进，最后留一页"感谢与提问"。',
+  '提醒：成员互评打分，答辩时请明确区分"我负责的部分"，并能现场回答 $\\Delta R/R_0$ 如何由未填 $B$、$R$ 列的数据算出（答案见 5.1 节第二段）。',
+].forEach(t => P(L.body(t)));
+
+/* ============ 组装 ============ */
+const sectPr = `<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1300" w:right="1300" w:bottom="1300" w:left="1300" w:header="851" w:footer="992" w:gutter="0"/><w:cols w:space="425"/><w:docGrid w:type="lines" w:linePitch="312"/></w:sectPr>`;
+const document = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+<w:body>${ch.join('')}${sectPr}</w:body></w:document>`;
+
+const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:eastAsia="宋体" w:cs="Times New Roman"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="en-US" w:eastAsia="zh-CN"/></w:rPr></w:rPrDefault>
+<w:pPrDefault><w:pPr><w:spacing w:after="60" w:line="300" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>
+<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>
+</w:styles>`;
+
+const ct = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Default Extension="png" ContentType="image/png"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+</Types>`;
+
+const rootRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
+</Relationships>`;
+
+const docRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+${L.rels.map(r => `<Relationship Id="${r.id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${r.target}"/>`).join('\n')}
+</Relationships>`;
+
+const core = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<dc:title>巨磁阻效应及应用 实验报告</dc:title><dc:language>zh-CN</dc:language>
+<dcterms:created xsi:type="dcterms:W3CDTF">2026-10-22T00:00:00Z</dcterms:created>
+</cp:coreProperties>`;
+const app = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Qoder</Application></Properties>`;
+
+const entries = [
+  { name: '[Content_Types].xml', data: ct },
+  { name: '_rels/.rels', data: rootRels },
+  { name: 'docProps/core.xml', data: core },
+  { name: 'docProps/app.xml', data: app },
+  { name: 'word/_rels/document.xml.rels', data: docRels },
+  { name: 'word/styles.xml', data: styles },
+  { name: 'word/document.xml', data: document },
+  ...[1, 2, 3, 4, 5, 6].map(i => ({ name: 'word/media/fig' + i + '.png', data: fs.readFileSync('fig' + i + '.png') })),
+];
+const out = 'D:/qq下载文件/GMR巨磁阻效应及应用实验报告.docx';
+fs.writeFileSync(out, L.zip(entries));
+console.log('written', out, fs.statSync(out).size, 'bytes; document.xml', document.length, 'chars');

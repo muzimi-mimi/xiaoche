@@ -1,0 +1,875 @@
+/* USER CODE BEGIN Header */
+/**
+  ******************************************************************************
+  * @file           : main.c
+  * @brief          : Main program body
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2026 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+/* USER CODE END Header */
+/* Includes ------------------------------------------------------------------*/
+#include "main.h"
+#include "adc.h"
+#include "tim.h"
+#include "usart.h"
+#include "gpio.h"
+
+/* Private includes ----------------------------------------------------------*/
+/* USER CODE BEGIN Includes */
+#include "OLED.h"
+#include "stm32f1xx_it.h"
+#include "stdio.h"
+#include <stdarg.h>
+#include "myI2C.h"
+#include "MPU6050.h"
+#include "SR04.h"
+#include "TB6612.h"
+#include "encode.h"
+#include "PID.h"
+#include <math.h>
+#include <string.h>
+#include <stdlib.h>
+
+#include "BlueSerial.h"
+/* USER CODE END Includes */
+
+/* Private typedef -----------------------------------------------------------*/
+/* USER CODE BEGIN PTD */
+
+/* USER CODE END PTD */
+
+/* Private define ------------------------------------------------------------*/
+/* USER CODE BEGIN PD */
+
+/* USER CODE END PD */
+
+/* Private macro -------------------------------------------------------------*/
+/* USER CODE BEGIN PM */
+
+/* USER CODE END PM */
+
+/* Private variables ---------------------------------------------------------*/
+
+/* USER CODE BEGIN PV */
+
+/* USER CODE END PV */
+
+/* Private function prototypes -----------------------------------------------*/
+void SystemClock_Config(void);
+/* USER CODE BEGIN PFP */
+
+/* USER CODE END PFP */
+
+/* Private user code ---------------------------------------------------------*/
+/* USER CODE BEGIN 0 */
+
+/* ==========================================================================
+ *                    ������ƽ��С�� ���� ���ƽṹ����
+ * ==========================================================================
+ *
+ * Ӳ����STM32F103C8T6 @72MHz / MPU6050(���I2C: PB3,PB4) / TB6612 + ˫������
+ *       OLED(���I2C: PB8,PB9) / USART3 ����(9600) / SR04 ������ / CCD ����(ADC1_IN4)
+ *
+ * ���ģ�Ψһʱ���� TIM3 �� 1ms �жϣ��� HAL_TIM_PeriodElapsedCallback����
+ *
+ *      1ms   ���� hcount++ ������Ƿ�ˤ��
+ *      10ms  ���� �� MPU6050 -> ��̬���� -> ƫ������ -> ֱ���� / ������
+ *      50ms  ���� �������� -> ���ٶ� -> �ٶȻ� + ת��
+ *
+ * �����ṹ���⻷�����ڻ��죩��
+ *
+ *      �ٶȻ�(50ms) �����������> AnglePID.Target ������
+ *                                              ����> ֱ����(10ms) ����> AvePWM ����
+ *      ת��(50ms) ���������������������������������������������������������੤> DifPWM ������������������������������������
+ *                                              ��                           ��
+ *                          LeftPWM  = AvePWM + DifPWM/2  <������������������������������������
+ *                          RightPWM = AvePWM - DifPWM/2  <������������������������������������
+ *
+ * ��������״̬�� CarState �������·�״̬�����壩��
+ * ��ѭ��(while(1))ֻ�������£�ˢ OLED���������������λ�����Σ�
+ * ����ʵʱ���ƶ����ж��� ���� ��Ϊ OLED_Update() ����� I2C �� 1024 �ֽڣ�
+ * һ��Ҫ ~40ms������ѭ������(~44.6ms)�ľ��󲿷֡�
+ * ========================================================================== */
+
+/* ===== ����״̬����ȡ�����ڵ� runflag ��������=====
+ *
+ *   ST_IDLE     �ϵ�Ĭ�ϡ�����ϵ磬������ָ�ÿ 10ms Ҳдһ�� PWM=0
+ *   ST_ERECT    ��������˦�ְѳ��ڽ�ƽ�ⴰ�ڣ�� ERECT_TIMEOUT_MS(3s)
+ *   ST_BALANCE  ����ֱ����ʻ��ֻ�����״̬����ƽ�⻷ + �ٶȻ� + ת��
+ *
+ * Ǩ��·����
+ *   ST_IDLE    --�յ� "1"--> StartErect() ------------> ST_ERECT
+ *   ST_ERECT   --|Angle| <= ERECT_DONE_ANG---------->  ST_BALANCE
+ *   ST_ERECT   --���� ERECT_TIMEOUT_MS(3s)---------->  StopCar() -> ST_IDLE
+ *   ST_BALANCE --|Angle| > ERECT_START_ANG---------->  StopCar() -> ST_IDLE
+ *
+ * CarState �ǵ��ֽڣ���ѭ��д���ж϶����ж�Ҫô����"��״̬"��Ҫô����
+ * "��״̬��д��"�������������ȫ�����Բ���Ҫ�ٽ��������� */
+#define ST_IDLE     0u
+#define ST_ERECT    1u
+#define ST_BALANCE  2u
+volatile uint8_t CarState = ST_IDLE;
+uint32_t hcount = 0, Count1 = 0;
+static uint8_t ReviveCount = 0;   // �Զ�����������������ǰδʹ�ã�
+char display_buf[128];
+uint32_t Rx_buf[300];
+
+//#define RX_BUF_SIZE  128
+//char BlueSerial_RxPacket[RX_BUF_SIZE];   // ���ջ�����
+//volatile uint8_t BlueSerial_RxFlag = 0;     // ֡��ɱ�־λ
+//static uint8_t RxState = 0;                 // ״̬��״̬
+//static uint16_t pRxPacket = 0;              // ��ǰ����������
+
+
+int16_t AX, AY, AZ, GX, GY, GZ;
+volatile uint8_t TimerErrorFlag;
+volatile uint16_t TimerCount;
+
+float AngleAcc;
+float AngleGyro;
+float Angle;
+
+/* ================== ƫ���� Yaw��Z �����ݻ��� ==================
+ * û�д����ƣ������֣������ʱ���ۻ��������ؼ��㣺
+ *
+ * 1) ��� YAW_LSB_PER_DPS = 16.384
+ *      GYRO_CONFIG = 0x18 -> ��2000��/s -> 32768/2000 = 16.384 LSB/(��/s)
+ *      �ο������� ��250��/s �� 131��ֱ���ճ�����ƫ���ǲ� 8 ����
+ * 2) dt �̶� 0.01f������ HAL_GetTick() ���� ������Ǻ㶨 10ms ���ڣ�
+ *      �� ms �����������붶����Ⱦ���֡�
+ * 3) ȫ�� float ���� double��Cortex-M3 �� FPU��double �����ģ�⣬Լ�� 5 ����
+ *
+ * YAW_BIAS_DPS �� Z ����ƫ���궨����������ֹ 30s��ȡ���� GZ �����ľ�ֵ / 16.384��
+ *      �궨ֵ 41.20 LSB / 16.384 = 2.51 ��/s
+ *      ����ֵ 39.45 LSB / 16.384 = 2.41 ��/s   <- ��ֵ
+ *   ���β� 1.67 LSB(��0.10 ��/s)�������¶����ϵ�״̬�����Բ�Ҫָ��д��һ��ֵ
+ *   ��Զ׼ȷ ���� �����ȵ��������ϵ羲ֹʱ�Զ��궨��
+ *   ���� 0.10 ��/s ������������ 6 ��/min �ĳ���Ư�ơ�
+ *
+ * YAW_DEADZONE_DPS ����ѹ�������ģ�
+ *   ʵ����� -0.102 ��/s ʱ��������Ư�� -6.1 ��/min���� 0.5 ��/s ������ѹ��
+ *   0.18 ��/min ���� ���� 34 �������������ٶ�(|��|<0.5��/s)���ضϲ����֣�
+ *   һ�� 90�� ��ת�ᶪ 0.03~0.98�㣨ת��Խ������Խ�࣬���������ٶ�ʱ�䣩��
+ *   ��ƫ���Խ׼���������ܿ���ԽС�������ʧҲ��֮��С�� */
+#define YAW_LSB_PER_DPS   16.384f   /* ��2000��/s ���̣�32768/2000 = 16.384 */
+#define GYRO_LSB_PER_DPS  YAW_LSB_PER_DPS  /* ���Ṳ��������(��2000��/s)��GX/GZ ���Ի��� */
+#define YAW_BIAS_DPS      2.41f     /* Z ����ƫ(��/s)����ֹʵ�� GZ ��ֵ 39.45 LSB / 16.384 */
+#define YAW_DEADZONE_DPS  0.5f      /* ���ٶ�����(��/s)��ѹ�ƾ�ֹʱ�Ļ���Ư�� */
+#define YAW_DT            0.01f     /* ��������(s)���� 10ms ���ƿ�һ�� */
+#define YAW_WRAP          1         /* 1=���㵽 ��180�㣻0=�����㡢�����ۼ� */
+float Yaw = 0.0f;                   /* ƫ����(��)����ͷ��תΪ����ȡ����ģ�鰲װ���� */
+float YawRate = 0.0f;               /* ƫ�����ٶ�(��/s)���ѿ���ƫ���ѹ����� */
+int16_t LeftPWM, RightPWM;			//��PWM����PWM
+int16_t AvePWM, DifPWM;				//ƽ��PWM�����PWM
+int16_t DifPWMTarget = 0;			//ת��Ŀ�꣨���٣���Ԥ����
+float DifSpeedFilter = 0.0f;		//ת���ٶȵ�ͨ�˲�ֵ���˵������ֲ��ٵĶ���
+#define TURN_FF  20.0f						/* ת��ǰ�����Ȱ������Ƴ����/��Ħ������������ TurnPID ������
+											 * û������|TurnPID.Out| С��ʱ�����Ӹ�����ת��ת�򻷻�"ճס" */
+#define TURN_FB_SIGN  (-1)   /* ת�򻷷������ţ�+1=���ӣ�-1=����ȡ����������װ��/š�߽ӷ�ʱ�ã� */
+/* ---------- ������(Self-Erect)���� ---------- */
+#define ERECT_PWM        100		/* ˦��PWM(0~100)�������Ҵ�̫�ͻ�˦��ͷ��������� */
+#define ERECT_START_ANG  55.0f	/* ƽ���� |Angle| ������ֵ -> �ж�ˤ�������������� */
+#define ERECT_DONE_ANG   30.0f	/* ǰ������|Angle| �ս��˴��� -> ����ƽ�⻷ */
+#define ERECT_DONE_ANG_BACK 45.0f	/* �󵹷��򣺺�����̧���ſ��˽ǶȾͽ���ƽ�⻷ */
+#define ERECT_TIMEOUT_MS 3000	/* ˦�ֳ�����ʱ�仹û���� -> ͣ����·��̫�� / ����ס�� */
+uint16_t ErectTime = 0;			/* ��ǰ ERECT �ѳ���(ms)��ÿ 10ms ��һ�Σ�ͬʱ���� LED ��˸ */
+#define ERECT_DIR        (1)		/* ˦�ַ���1=��ƽ�⻷ͬ��(Ĭ��)��-1=ȡ��(ԭ��תȦ/ĥ��̥ʱ�� -1) */
+#define ERECT_PULSE_MS   400			/* ����ģʽ��ÿ������ͨ��ʱ��(ms)��0=����ͨ��(һֱ˦) */
+#define ERECT_PERIOD_MS  500		/* ��������(ms)��ͨ�� 400ms + �ϵ� 100ms */
+static uint16_t Count2 = 0;			//ת��10ms��������ǰδʹ�ã�
+float LeftSpeed, RightSpeed;		//�����ٶȣ������ٶȣ������ ת/�룩
+float AveSpeed, DifSpeed;			//ƽ���ٶȣ�����ٶ�
+
+float G = 0.00;						//���ٶȼƽǶ����ƫ��(��)����е��װ��б�Ĳ��������������������ߵ�
+
+/* ---------- ���� PID �ṹ�壺����ʱͬʱ����Ա����ֵ ----------
+ * ע�� PID_Update() ���������ԣ��� pid.c����
+ *   1) Ki==0 ʱ�����ǿ������ ���� ����"�ȹػ��ֵ���"�ǰ�ȫ��
+ *   2) ��΢�����У�Out ���΢���������� (Actual - Actual1) �ϣ���������
+ *      ���Ը� Target �������΢�ֳ�� */
+PID_t AnglePID =  					//�ǶȻ���ֱ������������ Angle����� AvePWM�������ṹ���ڻ�
+{
+    .Kp = 16.9,						//������Ȩ��
+    .Ki = 0.06,						//������Ȩ��
+    .Kd = 30.4,						//΢����Ȩ��
+
+    .OutMax = 80,					//����޷����� -> ��� PWM 80
+    .OutMin = -80,					//����޷�����
+	
+	.OutOffset = 0,					//�������������Out>0 ʱ�ӡ�Out<0 ʱ���������ƿ������Ħ��
+	
+	.ErrorIntMax = 600,				//�����޷����ޣ������ֱ��ͣ�
+	.ErrorIntMin = -600,			//�����޷�����
+
+};
+PID_t SpeedPID =  					//�ٶȻ������� AveSpeed(ת/��)����� AnglePID.Target(�Ƕ��´���)
+{
+    .Kp = 2.7,						//������Ȩ��
+    .Ki = 0.21,						//������Ȩ��
+    .Kd = 0,						//΢����Ȩ��
+
+    .OutMax = 10,					//����޷� ��10�㣺����ֱ��Ŀ��������б��
+    .OutMin = -10,					
+	
+	.ErrorIntMax = 150,				//�����޷�����
+	.ErrorIntMin = -150,			//�����޷�����
+
+};
+PID_t TurnPID =  					//ת�򻷣����������ֲ��٣���� DifPWM
+{
+    .Kp = 5.9,						//������Ȩ��
+    .Ki = 0,						//������Ȩ�أ�Ki=0 -> �����Զ����㣬���������ƣ�
+    .Kd = 0,						//΢����Ȩ��
+
+    .OutMax = 30,					//����޷� ��30
+    .OutMin = -30,					
+	
+	.ErrorIntMax = 20,				//�����޷�����
+	.ErrorIntMin = -20,				//�����޷�����
+
+};
+
+/* ==========================================================================
+ * PID ״̬��λ / �Ƕ��ض�׼
+ *
+ * PID_ResetAll()�������� PID �� Target / Out / ���� / ���ȫ�����㣬��"Ԥ���ϴ�ֵ"
+ *   Ϊ��ǰ����ֵ����ֹ΢�����ڸ�λ��ĵ�һ�Ĳ����޴�����
+ *   ˤ��(StopCar)����ͣ("0")��������ʱ���ᾭ�� StopCar()�����Զ����ߵ����
+ *   �ڲ�ֻ�и�ֵ���޺�ʱ��������˿��Դ� 1ms �ж��ﰲȫ���á�
+ *
+ * Angle_Realign()���ü��ٶȼưѽǶ����¶�׼һ�Σ�����ֹʱ��Ч����
+ *   �����˲� Alpha=0.001 ��ʱ�䳣��Լ 10s��ˤ�������Լ�����̫����
+ *   ��������ǰ�����ض�׼һ�� ���� ȡ 300ms ���ٶȼƽǵ�ƽ����
+ *
+ *   �� �ڲ��� 30 �� HAL_Delay(10ms) = 300ms �������ȴ���ֻ�ܷ���ѭ�����ã�
+ *     ���Բ��ܷŽ� 1ms �� HAL_TIM_PeriodElapsedCallback��
+ *   �� �ȴ��ڼ����ص� TIM3 �жϣ��ж���Ҳ��� MPU6050��ͬһ�� I2C����
+ *     ���߲����ụ���ƻ�ʱ������ֻ�� DIER �� UIE λ����������״̬��
+ *     �����󰴽���ǰ��ԭ״�ָ���
+ * ========================================================================== */
+void PID_ResetAll(void)
+{
+    PID_Init(&AnglePID);
+    PID_Init(&SpeedPID);
+    PID_Init(&TurnPID);
+
+    /* Ԥ��"�ϴ�ֵ"����ֹ΢�����һ�ĳ�� */
+    AnglePID.Actual  = Angle;
+    AnglePID.Actual1 = Angle;
+    AnglePID.Error0  = AnglePID.Target - AnglePID.Actual;
+    AnglePID.Error1  = AnglePID.Error0;
+
+    SpeedPID.Actual  = AveSpeed;
+    SpeedPID.Actual1 = AveSpeed;
+    TurnPID.Actual   = DifSpeed;
+    TurnPID.Actual1  = DifSpeed;
+
+    DifSpeedFilter = DifSpeed;
+    DifPWM         = 0;
+}
+
+void Angle_Realign(void)
+{
+    int32_t  sum = 0;
+    int      k;
+    uint32_t itWasOn;
+
+    /* �����ڼ�Ҫ���� TIM3 �жϣ��ж���Ҳ��� MPU6050(ͬһ�� I2C)��
+     * ���߲����ụ���ƻ�ʱ������ֻ�� DIER �� UIE λ����������״̬��
+     * �����󰴽���ǰ��ԭ״�ָ��������ϵ��ʼ���������е��ö����ã��� */
+    itWasOn = (htim3.Instance->DIER & TIM_IT_UPDATE) ? 1u : 0u;
+    __HAL_TIM_DISABLE_IT(&htim3, TIM_IT_UPDATE);
+
+    for (k = 0; k < 30; k++)              /* 30 x 10ms = 300ms */
+    {
+        MPU6050_GetData(&AX, &AY, &AZ, &GX, &GY, &GZ);
+        sum += (int32_t)(-atan2(AY, AZ) / 3.14159 * 180.0);
+        HAL_Delay(10);
+    }
+
+    Angle = (float)sum / 30.0f + G;       /* ȡƽ���������ӻ�е���ƫ�� */
+
+    if (itWasOn)
+    {
+        __HAL_TIM_CLEAR_IT(&htim3, TIM_IT_UPDATE);
+        __HAL_TIM_ENABLE_IT(&htim3, TIM_IT_UPDATE);
+    }
+}
+
+/* ==========================================================================
+ * ״̬Ǩ�ƽӿڣ�StartErect() / StopCar()
+ *   StartErect() ֻ����ѭ�����ã��ڲ����� 300ms ���Ƕ��ض�׼��
+ *   StopCar()    ��ѭ���� 10ms �ж϶�����ã�����ֻ����ֵ + PID ��λ + GPIO д��
+ *                ��Щ���ж��ﶼ�ǰ�ȫ��
+ *   CarState ���ֽڣ��ж�ֻ�ῴ��"��״̬"��"��״̬��д��"������Ҫ�ٽ���
+ * ========================================================================== */
+void StopCar(void)
+{
+    CarState  = ST_IDLE;
+    ErectTime = 0;
+    PID_ResetAll();               /* ˤ��/��ͣ/��ʱ�������л����ڲ�״̬һ����ɾ� */
+    TB6612_setPWM(1, 0);          /* ͣ��PWM=0��IN1/IN2 ͬʱΪ�� -> �������ͣת */
+    TB6612_setPWM(2, 0);
+}
+
+void StartErect(void)
+{
+    if (CarState != ST_IDLE)
+    {
+        return;                   /* �������оͺ��ԣ��ظ��յ� "1" �������� */
+    }
+
+    /* ���ض�׼�Ƕȣ��ٽ�������ˤ���󻥲��˲�Ҫʮ�����������
+     * �������ͻ���Ŵ�ĳ�ʼ�Ƕ�ȥ˦�֡�300ms ������ֻ����ѭ�����á� */
+    Angle_Realign();
+
+    PID_ResetAll();
+    ErectTime = 0;
+
+    CarState = ST_ERECT;          /* ���һ�������жϿ�ʼ�ӹ� */
+}
+
+static const char *StateStr(void)
+{
+    if (CarState == ST_BALANCE) return "BAL";
+    if (CarState == ST_ERECT)   return "ERECT";
+    return "IDLE";
+}
+
+/* ==========================================================================
+ * TIM3 �����жϣ�����ϵͳ��Ψһʱ����1ms��
+ *   tim.c: Prescaler = 72-1, Period = 1000-1  ->  72MHz/72/1000 = 1ms
+ *
+ * ���ķ����㣺
+ *   ÿ 1ms   hcount++������ĩβ����Ƿ�ˤ��
+ *   ÿ 10ms  �� MPU6050 -> ��̬���� -> ƫ������ -> ֱ���� / ������
+ *   ÿ 50ms  �������� -> ���ٶ� -> �ٶȻ� + ת��
+ *
+ * ע�⣺1ms �ı�����ֻ���� hcount++ ��һ��ˤ���жϣ��ػ�ȫ�� 10ms / 50ms
+ * ��֧�� ���� �����������ж�ռ��Ҳ���ᶥ�� 1ms ���ڡ�
+ * ========================================================================== */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim != &htim3)
+    {
+        return;
+    }
+
+    hcount++;
+    __HAL_TIM_CLEAR_IT(&htim3, TIM_IT_UPDATE);
+
+    if (hcount >= 1)                                 /* ===== 10ms �� ===== */
+    {
+        hcount = 0;
+        MPU6050_GetData(&AX, &AY, &AZ, &GX, &GY, &GZ);   /* һ�� I2C ͻ���� 14 �ֽڣ�Լ 150us */
+        /* ���� X ����ƫ��+10 LSB �� 0.61��/s����ʵ��Ӳ���Ĺ̶�ƫ�� */
+        GX += 10;
+
+        /* ���ٶȼƽǶȣ�atan2 ������ȣ�ת�ɽǶȣ�G �ǻ�е���ƫ�� */
+        AngleAcc = -atan2(AY, AZ) / 3.14159 * 180 + G;
+
+        /* �����˲� Alpha=0.001��
+         *   ���ٶȼƳ���׼�������񶯣����߼��ٶ����У�
+         *   ���ݻ��ֶ���׼����Ư
+         *   ʱ�䳣�� �� 1/(Alpha * 100Hz) = 10s���� 10s �������ݣ������ż��ٶȼ�
+         * ����Ԥ����ļ������� Angle �ķ���Լ����-atan2(AY,AZ)������ GX �������෴��
+         * dt ֱ��д 0.01 �����ñ�����������Ǻ㶨 10ms ���ڡ� */
+        AngleGyro = Angle - GX / 32768.0 * 2000 * 0.01;
+        float Alpha = 0.001f;
+        Angle = Alpha * AngleAcc + (1 - Alpha) * AngleGyro;
+
+        /* ---------- ƫ���ǣ�Z �����ݻ��� ----------
+         * ��ȡ���ƫ��������dt ��ȡֵ���ɼ��ļ��Ϸ� YAW_* �궨�崦��ע�͡�
+         * ��ο����̵������ؼ����죺
+         *   1) ������ GYRO_CONFIG=0x18(��2000��/s) �� 16.384 LSB/(��/s)��
+         *      �ο������� 0x00(��250��/s) �� 131���ճ�����ƫ���ǲ� 8 ��
+         *   2) dt �̶� 0.01f������ HAL_GetTick() �� 1ms �ֱ���ȥ�� */
+        YawRate = GZ / YAW_LSB_PER_DPS - YAW_BIAS_DPS;
+        if (YawRate > -YAW_DEADZONE_DPS && YawRate < YAW_DEADZONE_DPS) YawRate = 0.0f;
+        Yaw += YawRate * YAW_DT;
+#if YAW_WRAP
+        if      (Yaw >  180.0f) Yaw -= 360.0f;
+        else if (Yaw < -180.0f) Yaw += 360.0f;
+#endif
+
+        /* ================= ���Ʒ��ɣ���̬���� ================= */
+        if (CarState == ST_BALANCE)
+        {
+            /* ---------- ֱ����ԭƽ�⻷��----------
+             * ȡ���ţ�AnglePID ������Ϊ Target-Actual����������ת����
+             * �� Angle ���������෴���������Ҫ��һ�βŶ�Ӧ"���ıߵ������ı�׷"�� */
+            AnglePID.Actual = Angle;
+            PID_Update(&AnglePID);
+            AvePWM = -AnglePID.Out;
+
+            LeftPWM  = AvePWM + DifPWM / 2;
+            RightPWM = AvePWM - DifPWM / 2;
+
+            if (LeftPWM > 80)        LeftPWM  = 80;
+            else if (LeftPWM < -80)  LeftPWM  = -80;
+            if (RightPWM > 80)       RightPWM = 80;
+            else if (RightPWM < -80) RightPWM = -80;
+
+            TB6612_setPWM(1, LeftPWM);
+            TB6612_setPWM(2, RightPWM);
+        }
+        else if (CarState == ST_ERECT)
+        {
+            /* ---------- ������������ͬ��ͬ���� PWM���÷��������ذѳ�˦����ֱ ----------
+             * ������ƽ�⻷һ�£�Angle>0 ��ǰ˦��Angle<0 ����˦��
+             * ǰ�����������ò�ͬ��"��λ��"��������̧�������ż��ſ�
+             * ���������в�����ת��ֻ��ת�򻷰Ѳ������� 0�� */
+            float erectDoneAng = (Angle > 0.0f) ? ERECT_DONE_ANG : ERECT_DONE_ANG_BACK;
+
+            if (fabsf(Angle) <= erectDoneAng)
+            {
+                /* �ѽ���ƽ�ⷶΧ -> ����ƽ�⻷ */
+                PID_ResetAll();
+                ErectTime = 0;
+                CarState  = ST_BALANCE;
+            }
+            else if (ErectTime < ERECT_TIMEOUT_MS)
+            {
+                int16_t swing = (Angle > 0.0f) ? ERECT_PWM : -ERECT_PWM;
+                if (ERECT_DIR < 0) swing = -swing;      /* ���򲻶Ծ�ȡ�� */
+
+                if (ERECT_PULSE_MS > 0 && (ErectTime % ERECT_PERIOD_MS) >= ERECT_PULSE_MS)
+                    swing = 0;                          /* ����(����)ģʽ���ϵ��϶�ó������Լ���˦��ȥ */
+
+                /* ת���ڴ�Ҳ���У���Ŀ��̶�Ϊ 0��ֻ����Ѳ���ѹ�� 0 */
+                TurnPID.Target = 0.0f;
+                TurnPID.Actual = DifSpeed;
+                PID_Update(&TurnPID);
+                DifPWM = (int16_t)TurnPID.Out;
+
+                LeftPWM  = swing + DifPWM / 2;
+                RightPWM = swing - DifPWM / 2;
+
+                if (LeftPWM > 100)        LeftPWM  = 100;
+                else if (LeftPWM < -100)  LeftPWM  = -100;
+                if (RightPWM > 100)       RightPWM = 100;
+                else if (RightPWM < -100) RightPWM = -100;
+
+                TB6612_setPWM(1, LeftPWM);
+                TB6612_setPWM(2, RightPWM);
+                ErectTime += 10;                        /* ����ÿ 10ms ��һ�� */
+            }
+            else
+            {
+                /* ---------- ��ʱ��·��̫��/����ס/��̥�򻬣�ͣ�� ----------
+                 * �˻� IDLE���ٷ�һ�� "1" �������ԡ� */
+                StopCar();
+            }
+        }
+        else
+        {
+            /* ---------- ST_IDLE���ϵ�Ĭ�ϣ�������ϵ� ----------
+             * ÿ 10ms ����дһ�� 0���Ƿ���ʽд�����κ�����Ĳ��� PWM ���ᱻĨ�� */
+            TB6612_setPWM(1, 0);
+            TB6612_setPWM(2, 0);
+        }
+    }
+
+    Count1 ++;				//�ƴμ���
+
+    if (Count1 >= 5)		/* ===== 50ms �㣺�ٶȻ� + ת�� ===== */
+    {
+        Count1 = 0;			//�ƴ����㣬�����´μ���
+
+        /* ��������ÿ 50ms ��һ�������������Զ����������
+         *   ReadSpeed() ���� (short)CNT �������������ţ������ɸ���
+         *   44   = ���תһȦ�ļ�������
+         *   0.05 = �������� 50ms
+         *   30   = ���ٱ�
+         *   -> �����"����� ת/��"
+         * ����ȡ���ţ������������ļ��������෴������ͳһ��"ǰ��Ϊ��" */
+        LeftSpeed = ReadSpeed(&htim2) / 44.0 / 0.05 / 30;
+        RightSpeed = -ReadSpeed(&htim4) / 44.0 / 0.05 / 30;
+
+        /*�źŷ�ת*/
+			AveSpeed = (LeftSpeed + RightSpeed) / 2.0;	
+			DifSpeed = TURN_FB_SIGN * (LeftSpeed - RightSpeed);			
+			
+			/*ִ��PID������*/
+			if (CarState == ST_BALANCE)		/* ֻ��ֱ����ʻʱ�����ٶȻ�+ת�� */
+			{
+				/*�ٶȻ�PID����*/
+				SpeedPID.Actual = AveSpeed;			
+				PID_Update(&SpeedPID);				//���÷�װ�õĺ�����һ�����PID����͸���
+				AnglePID.Target = SpeedPID.Out;		/* �⻷��������ڻ�Ŀ�꣺�����˾���ǰ��һ�������� */
+				
+				/*ת��PID����*/
+				DifSpeedFilter += 0.5f * (DifSpeed - DifSpeedFilter);	/* ת���ٶ�һ�׵�ͨ�����Ʊ���������/��ë�̣�ϵ�� 0.5 �ɵ�(0.3 ��ƽ�� / 0.7 ������) */
+				TurnPID.Actual = DifSpeedFilter;			
+				PID_Update(&TurnPID);				//���÷�װ�õĺ�����һ�����PID����͸���
+				DifPWM = (int16_t)(TurnPID.Out + TURN_FF * TurnPID.Target);	/* ת���� + ת��ǰ�� */
+				if (DifPWM > 50) DifPWM = 50; else if (DifPWM < -50) DifPWM = -50;	/* �޷� ��25/�֣�ǰ��+�������Ӻ����׳����������ס */				
+
+        }
+
+    }
+
+
+    /* ƽ���е��³��� ERECT_START_ANG -> StopCar() ͣ���� IDLE��
+     * ���ж��� 1ms ��ִ�У��� Angle �� 10ms ����һ�Σ�����ʵ����Ӧ������ 10ms��
+     * StopCar() �ڲ����� PID_ResetAll()�������ٷ�һ�� "1" ʱ StartErect()
+     * ������ Angle_Realign() �ض�׼һ�νǶȡ� */
+    if (CarState == ST_BALANCE && fabsf(Angle) > ERECT_START_ANG)
+    {
+        StopCar();
+    }
+
+
+
+    if (__HAL_TIM_GET_FLAG(&htim3, TIM_IT_UPDATE) != RESET)
+    {
+
+        if (__HAL_TIM_GET_FLAG(&htim3, TIM_IT_UPDATE) == SET)
+        {
+            TimerErrorFlag = 1;  // �жϳ�ʱ��ǣ�����������ʱ��һ���ж��Ѿ��ֵ���
+                                  // -> ˵������жϴ���ʱ�ˣ��������Թ۲���
+
+            __HAL_TIM_CLEAR_IT(&htim3, TIM_IT_UPDATE);
+        }
+
+        TimerCount = __HAL_TIM_GET_COUNTER(&htim3);
+    }
+}
+
+/* USER CODE END 0 */
+
+/**
+  * @brief  The application entry point.
+  * @retval int
+  */
+int main(void)
+{
+
+  /* USER CODE BEGIN 1 */
+
+  /* USER CODE END 1 */
+
+  /* MCU Configuration--------------------------------------------------------*/
+
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
+
+  /* USER CODE BEGIN Init */
+
+  /* USER CODE END Init */
+
+  /* Configure the system clock */
+  SystemClock_Config();
+
+  /* USER CODE BEGIN SysInit */
+
+  /* USER CODE END SysInit */
+
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_TIM3_Init();
+  MX_TIM1_Init();
+  MX_TIM2_Init();
+  MX_TIM4_Init();
+  MX_USART3_UART_Init();
+  MX_ADC1_Init();
+  /* USER CODE BEGIN 2 */
+    HAL_Delay(200);   // �� OLED �ϵ��ȶ�����������������ʾ�쳣
+    OLED_Init();
+    OLED_Clear();
+
+    MPU6050_Init();
+    Angle_Realign();   /* �ϵ����ü��ٶȼƶ�׼�Ƕ�(��ֹʱ��Ч)�����򻥲��˲�Ҫʮ�����������
+                        * �ڼ䷢��"1"���ó����Ŵ���ĽǶ�ȥ˦�֡��˴� TIM3 �жϻ�û������ȫ�� */
+    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
+    HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
+    HAL_TIM_Encoder_Start(&htim4, TIM_CHANNEL_ALL);
+    BlueSerial_Init();   // ��ʼ���������ڽ���
+    HAL_TIM_Base_Start(&htim3);
+    uint8_t ID;
+    ID = MPU6050_GetID();   /* �� WHO_AM_I��0x68 ˵�� MPU6050 ���ߡ������ǰδʹ�ã�
+                             * ��Ҫʱ�ɷŵ� OLED �Ͽ���ȷ�ϴ������Ƿ�Ӧ�� */
+    OLED_Update();
+    MX_TIM3_Init();                  /* �ظ���ʼ��һ�� TIM3�������� MX_TIM3_Init() ͬ�����ã���
+                                      * ȷ���ڿ��ж�ǰ�Ĵ����Ǹɾ��� */
+    HAL_TIM_Base_Start_IT(&htim3);   /* 1ms update interrupt */
+    PID_Init(&AnglePID);
+    PID_Init(&SpeedPID);
+    PID_Init(&TurnPID);
+
+    CarState = ST_IDLE;          /* �ϵ�Ĭ�ϣ�����ϵ磬������ "1" �ſ�ʼ */
+
+    // Ԥ�ýǶȻ�������΢�ֳ��
+    AnglePID.Actual = Angle;
+    AnglePID.Actual1 = Angle;   //ͬ��Ԥ���ϴ�ʵ��ֵ����ֹ΢�����һ�ĳ��
+    AnglePID.Error0 = AnglePID.Target - AnglePID.Actual;
+    AnglePID.Error1 = AnglePID.Error0;    
+  /* USER CODE END 2 */
+
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
+    while (1)
+    {
+        int len;
+        uint8_t i;
+        static uint32_t lastSendTime = 0;
+//	TB6612_setPWM(2,100);
+
+        /* ״ָ̬ʾ�ƣ�PC13���͵�ƽ��������
+         *   Ϩ�� = IDLE ����    ��˸ = ERECT ��������    ���� = BALANCE ֱ����ʻ
+         *   ��˸�� ErectTime/150 ������ÿ 150ms ��תһ�� */
+        {
+            uint8_t ledOff;
+            if (CarState == ST_BALANCE)     ledOff = 0;
+            else if (CarState == ST_ERECT)  ledOff = (uint8_t)((ErectTime / 150u) & 1u);
+            else                            ledOff = 1;
+            HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, ledOff ? GPIO_PIN_SET : GPIO_PIN_RESET);
+        }
+
+
+        /* ---------- OLED ���֣�128x64��OLED_6X8 ����ÿ�ַ� 6 ���ؿ�----------
+         *   y=0    ST:<״̬> <������ʱms>
+         *   y=8    KP: �ǶȻ� // �ٶȻ� // ת��
+         *   y=16   KI: ͬ��
+         *   y=24   KD: ͬ��
+         *   y=32   T:<�ǶȻ�Ŀ��ֵ>        (x=0,  �� 0..41)
+         *          Yaw:<ƫ���� ��>         (x=60, �� 60..125)
+         *   y=40   Angle:<�ǶȻ�ʵ��ֵ>    G:<�Ƕ����ƫ��>  (x=70)
+         *   y=48   O:<�ǶȻ����>          S:<����ת��>      (x=70)
+         *   y=56   GX<X����ٶȡ�/s>  GZ<Z����ٶȡ�/s>  S<����ת��>
+         *          (x=0, 42, 84)
+         *
+         * �ֶμ���ǰ� 6 ����/�ַ���õģ������ص���
+         * �� OLED.c д�Դ��õ��� |= ������ =���ֶ�һ���ص��ᰴ"��λ��"����������
+         *   �����ǻ��า�� ���� ���ԸĲ���ʱ�����Լ����ȡ� */
+        OLED_Clear();
+//        OLED_Printf(0, 0, OLED_6X8, "ST:%s %d", StateStr(), (int)ErectTime);   /* ״̬ + ������ʱ(ms) */
+//        OLED_Printf(0, 8, OLED_6X8, "KP:%05.2f//%05.2f//%05.2f ", AnglePID.Kp, SpeedPID.Kp, TurnPID.Kp);		//�ǶȻ�Kp
+//        OLED_Printf(0, 16, OLED_6X8, "KI:%05.2f//%05.2f//%05.2f", AnglePID.Ki, SpeedPID.Ki, TurnPID.Ki);		//�ǶȻ�Ki
+//        OLED_Printf(0, 24, OLED_6X8, "KD:%05.2f//%05.2f//%05.2f", AnglePID.Kd, SpeedPID.Kd, TurnPID.Kd);		//�ǶȻ�Kd
+        OLED_Printf(0, 32, OLED_6X8, "T:%+05.1f", AnglePID.Target);	//�ǶȻ�Ŀ��ֵ
+        OLED_Printf(60, 32, OLED_6X8, "Yaw:%+07.2f", Yaw);			//ƫ����(��)����ͷ��תΪ��
+        OLED_Printf(0, 40, OLED_6X8, "Angle:%+05.1f", Angle);			//�ǶȻ�ʵ��ֵ
+        OLED_Printf(0, 48, OLED_6X8, "O:%+05.0f", AnglePID.Out);	//�ǶȻ����ֵ
+//        OLED_Printf(0, 56, OLED_6X8, "GX%+05.1f", GX / GYRO_LSB_PER_DPS);  /* X����ٶ�(��/s)����ֹӦΪ 0 */
+//        OLED_Printf(42, 56, OLED_6X8, "GZ%+05.1f", GZ / GYRO_LSB_PER_DPS);  /* Z����ٶ�(��/s)����ֹ����Ӧ�ӽ� YAW_BIAS_DPS */
+//        OLED_Printf(70, 40, OLED_6X8, "G:%+02.2f", G);
+        OLED_Printf(70, 48, OLED_6X8, "S:%+02.2f", RightSpeed);
+        OLED_Printf(84, 56, OLED_6X8, "S%+02.2f", LeftSpeed);
+        OLED_Update();
+
+
+        /* ---- ����������ָ�ʽ��֧�� ----
+         *   ���ַ����ֻ���������ֱ���ã���'1' = ����   '0' = ��ͣ
+         *   [��]��App/��λ������[1] / [0] ������ͬ�����⻹�л����ҡ�� */
+        if (BlueSerial_CmdFlag)
+        {
+            char cmd = BlueSerial_CmdChar;
+            BlueSerial_CmdFlag = 0;
+            if      (cmd == '1') { StartErect(); }
+            else if (cmd == '0') { StopCar(); }
+        }
+
+        /* �����������ջ���ۣ��������������� [��] */
+        for (i = 0; i < 2; i++)
+        {
+            if (BlueSerial_RxFlag[i] == 1)
+            {
+                char *Tag = strtok(BlueSerial_RxPacket[i], ",");	//ȡ��1�Σ���Ϊ��ǩTag
+
+                if (Tag != NULL)
+                {
+                    if (strcmp(Tag, "1") == 0)                  /* �յ� [1] -> ���� */
+                    {
+                        StartErect();
+                    }
+                    else if (strcmp(Tag, "0") == 0)             /* �յ� [0] -> ��ͣ */
+                    {
+                        StopCar();
+                    }
+                    else if (strcmp(Tag, "key") == 0)           /* [key,����,����]������֡ */
+                    {
+                        char *Name = strtok(NULL, ",");			//ȡ��2�Σ���Ϊ��������
+                        char *Action = strtok(NULL, ",");		//ȡ��3�Σ���Ϊ��������
+
+                        /*�˴�ִ�а���������Ŀǰ������ʱû���õ�*/
+                    }
+                    else if (strcmp(Tag, "slider") == 0)	//[slider,����,ֵ]������֡���������ߵ���
+                    {
+                        char *Name = strtok(NULL, ",");			//ȡ��2�Σ���Ϊ��������
+                        char *Value = strtok(NULL, ",");		//ȡ��3�Σ���Ϊ����ֵ
+
+                        /*ִ�л������������λ��������ֵд����Ӧ�� PID ����*/
+                        if (strcmp(Name, "AngleKp") == 0)	//��������ΪAngleKp
+                        {
+                            AnglePID.Kp = atof(Value);		//�ѻ���ֵ�����ǶȻ�Kp
+                        }
+                        else if (strcmp(Name, "AngleKi") == 0)	//��������ΪAngleKi
+                        {
+                            AnglePID.Ki = atof(Value);		//�ѻ���ֵ�����ǶȻ�Ki
+                        }
+                        else if (strcmp(Name, "AngleKd") == 0)	//��������ΪAngleKd
+                        {
+                            AnglePID.Kd = atof(Value);		//�ѻ���ֵ�����ǶȻ�Kd
+                        }
+                        else if (strcmp(Name, "G") == 0)	//��������ΪG���Ƕ����ƫ��
+                        {
+                            G = atof(Value);		//�ѻ���ֵ�����Ƕ����ƫ��
+                        }
+                        else if (strcmp(Name, "SpeedKp") == 0)		//��������ΪSpeedKp
+                        {
+                            SpeedPID.Kp = atof(Value);				//�ѻ���ֵ�����ٶȻ�Kp
+                        }
+                        else if (strcmp(Name, "SpeedKi") == 0)		//��������ΪSpeedKi
+                        {
+                            SpeedPID.Ki = atof(Value);				//�ѻ���ֵ�����ٶȻ�Ki
+                        }
+                        else if (strcmp(Name, "SpeedKd") == 0)		//��������ΪSpeedKd
+                        {
+                            SpeedPID.Kd = atof(Value);				//�ѻ���ֵ�����ٶȻ�Kd
+                        }
+                        else if (strcmp(Name, "TurnKp") == 0)		//��������ΪTurnKp
+                        {
+                            TurnPID.Kp = atof(Value);				//�ѻ���ֵ����ת��Kp
+                        }
+                        else if (strcmp(Name, "TurnKi") == 0)		//��������ΪTurnKi
+                        {
+                            TurnPID.Ki = atof(Value);				//�ѻ���ֵ����ת��Ki
+                        }
+                        else if (strcmp(Name, "TurnKd") == 0)		//��������ΪTurnKd
+                        {
+                            TurnPID.Kd = atof(Value);				//�ѻ���ֵ����ת��Kd
+                        }
+
+                    }
+                    else if (strcmp(Tag, "joystick") == 0)		//[joystick,LH,LV,RH,RV]��ҡ��֡
+                    {
+                        int8_t LH = atoi(strtok(NULL, ","));		//ȡ��2�Σ���Ϊҡ��ֵLH
+                        int8_t LV = atoi(strtok(NULL, ","));		//ȡ��3�Σ���Ϊҡ��ֵLV
+                        int8_t RH = atoi(strtok(NULL, ","));		//ȡ��4�Σ���Ϊҡ��ֵRH
+                        int8_t RV = atoi(strtok(NULL, ","));		//ȡ��5�Σ���Ϊҡ��ֵRV
+
+                        /*ִ��ҡ�˲���*/
+                        /* ҡ�˻������������� ��5 ���ڵ���Ư */
+                        if (LV > -5 && LV < 5) { LV = 0; }
+                        if (RH > -5 && RH < 5) { RH = 0; }
+
+                        SpeedPID.Target = LV / 50.0;		
+                        TurnPID.Target   = RH / 50.0;				//ҡ��ֵRH����������ת��Ŀ��ֵ��RH>0=��ת��RH<0=��ת
+                        if (TurnPID.Target != 0.0f && LV == 0)
+                            SpeedPID.Target = 0.20f;		/* ֻת�򲻸��ٶ�ʱ����һ��ǰ���ٶȣ�����ԭ�ش�ת(0.15~0.4 �ɵ�) */
+
+                    }
+                }
+
+                BlueSerial_RxFlag[i] = 0;				//������ɺ��־λ��0���Ա������һ֡����
+            }
+        }
+
+        /* ��λ�����������ÿ����ѭ����һ֡��Ŀǰ�� GZ �� Yaw ��·
+         *   ��ѭ������Լ 44.6ms ���� ����ȫ���� OLED_Update() ����� I2C ��
+         *   �� USART3 ��ǰ�� 9600 ���أ���һ֡Լ 20 �ֽ�Ҫ ~21ms��
+         *     �Ѿ�ռ����ѭ��һ��ʱ�䡣Ҫ�����ܵĲ��Σ��ȰѲ������ᵽ 115200 */
+        len = sprintf(display_buf, "[plot,%d,%.2f]",GZ,Yaw);//TurnPID.Target,DifSpeed,DifPWM,%d
+        HAL_UART_Transmit(&huart3, (uint8_t *)display_buf, (uint16_t)len, 100);
+    }
+
+    /* USER CODE END WHILE */
+
+    /* USER CODE BEGIN 3 */
+
+  /* USER CODE END 3 */
+}
+
+/**
+  * @brief System Clock Configuration
+  * @retval None
+  */
+void SystemClock_Config(void)
+{
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
+
+  /** Initializes the RCC Oscillators according to the specified parameters
+  * in the RCC_OscInitTypeDef structure.
+  */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.HSEPredivValue = RCC_HSE_PREDIV_DIV1;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL9;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Initializes the CPU, AHB and APB buses clocks
+  */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
+  PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV6;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+/* USER CODE BEGIN 4 */
+
+/* USER CODE END 4 */
+
+/**
+  * @brief  This function is executed in case of error occurrence.
+  * @retval None
+  */
+void Error_Handler(void)
+{
+  /* USER CODE BEGIN Error_Handler_Debug */
+    /* User can add his own implementation to report the HAL error return state */
+    __disable_irq();
+
+    while (1)
+    {
+    }
+
+  /* USER CODE END Error_Handler_Debug */
+}
+#ifdef USE_FULL_ASSERT
+/**
+  * @brief  Reports the name of the source file and the source line number
+  *         where the assert_param error has occurred.
+  * @param  file: pointer to the source file name
+  * @param  line: assert_param error line source number
+  * @retval None
+  */
+void assert_failed(uint8_t *file, uint32_t line)
+{
+  /* USER CODE BEGIN 6 */
+    /* User can add his own implementation to report the file name and line number,
+       ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  /* USER CODE END 6 */
+}
+#endif /* USE_FULL_ASSERT */

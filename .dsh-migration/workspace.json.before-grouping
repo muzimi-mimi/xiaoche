@@ -1,0 +1,38 @@
+{
+  "unit": {
+    "name": "workspace",
+    "version": 2
+  },
+  "global": {
+    "initialized": true,
+    "defaultWorkspaceId": "464dfce2-6643-4af4-9e30-fd2c4badff1b",
+    "workspaceIds": [
+      "c14a3389-736c-479a-8d2a-0174078f6a03",
+      "464dfce2-6643-4af4-9e30-fd2c4badff1b"
+    ],
+    "archivedSessionIds": [],
+    "pinnedSessionIds": []
+  },
+  "tables": {
+    "workspaces": {
+      "464dfce2-6643-4af4-9e30-fd2c4badff1b": {
+        "path": "C:\\Users\\huang\\AppData\\Local\\Deepseek Harness EAC\\dpx\\dsh-environments\\eac-beta\\home\\Documents\\deepseek-harness\\default-workspace",
+        "title": "default-workspace",
+        "sessionIds": [
+          "session-ad68ffb6-a617-4966-b1ec-898d561acdcc"
+        ],
+        "createdAt": "2026-10-05T07:08:53.616Z",
+        "updatedAt": "2026-10-05T07:08:53.671Z"
+      },
+      "c14a3389-736c-479a-8d2a-0174078f6a03": {
+        "path": "D:\\codex",
+        "title": "codex",
+        "sessionIds": [
+          "session-eddc04e7-c14c-4a37-856a-f927987d1a8d"
+        ],
+        "createdAt": "2026-10-05T07:13:31.469Z",
+        "updatedAt": "2026-10-05T07:13:31.505Z"
+      }
+    }
+  }
+}
