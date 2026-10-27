@@ -137,15 +137,20 @@ volatile uint8_t CarState = ST_IDLE;
 #define TICK_10MS   1
 #define TICK_50MS   5
 
-uint32_t hcount = 0, Count1 = 0;
+/* ±àÂëÆ÷Âö³å²îÖµ -> ÂÖËÙ(×ª/Ãë)£º44 Ïß x 30 ¼õËÙ±È£¬50ms ²ÉÑù
+ *   ×ª/Ãë = Âö³åÊı / 44 / 0.05 / 30 = Âö³åÊı x (1/66)
+ * Ô­À´Ğ´³É /44.0/0.05/30 ÊÇ double ÈıÁ¬³ı£»ÕÛ³ÉÒ»´Î float ³Ë·¨£¬
+ * ÊıÖµµÈ¼Û(1/66 µÄÉáÈëÔ¶Ğ¡ÓÚ 1 ¸öÂö³åµÄ·Ö±æÂÊ)£¬Ê¡Èí¸¡µãµÄÀ´»Ø»»Ëã¡£ */
+#define ENC_TO_RPS  (1.0f / (44.0f * 0.05f * 30.0f))
+
+static uint32_t hcount = 0, Count1 = 0;  /* TIM3 ÅÄÄÚ·ÖÆµ¼ÆÊı(10ms/50ms ¶ÎÓÃ)£¬½ö±¾ÎÄ¼ş¿É¼û */
 
 /* CCD ²ÉÑù·ÖÆµ£ºÃ¿ÅÄ +1£¬Êıµ½ CCD_Div ²Å²ÉÒ»Ö¡
  * Êµ¼ÊÖÜÆÚ = CCD_Div x TIM3 ÖÜÆÚ(10ms)£¬ÓëÖĞ¶ÏÓÅÏÈ¼¶ÎŞ¹Ø¡£ */
 static uint16_t CCD_count = 0;
-static uint8_t ReviveCount = 0;   // ×Ô¶¯ÀÛ¼Ó¼ÆÊı£¬µ±Ç°Î´Ê¹ÓÃ
-char display_buf[128];
-uint32_t Rx_buf[300];
+static char display_buf[128];             /* ÉÏÎ»»ú [plot] Ö¡×é°ü»º³å£¬½öÖ÷Ñ­»·ÓÃ */
 
+/* À¶ÑÀ½ÓÊÕµÄ¾ÉÊÖĞ´ÊµÏÖ£¬ÒÑ±» BlueSerial.c È¡´ú£¬Áô×÷²Î¿¼£¨ÎğÇå£© */
 //#define RX_BUF_SIZE  128
 //char BlueSerial_RxPacket[RX_BUF_SIZE];   // ½ÓÊÕ»º³å
 //volatile uint8_t BlueSerial_RxFlag = 0;     // Ö¡½ÓÊÕ±êÖ¾Î»
@@ -193,14 +198,17 @@ float Yaw = 0.0f;                   /* Æ«º½½Ç(¶È)£º×ó×ªÎªÕı¡¢ÓÒ×ªÎª¸º */
 float YawRate = 0.0f;               /* Æ«º½½ÇËÙ¶È(¡ã/s)£ºÓÉ GZ È¥ÁãÆ«µÃµ½ */
 int16_t LeftPWM, RightPWM;			// ×ó PWM¡¢ÓÒ PWM
 int16_t AvePWM, DifPWM;				// Æ½ºâ PWM¡¢²îËÙ PWM
-int16_t DifPWMTarget = 0;			// ×ªÏòÄ¿±ê£¨ÓÉÒ¡¸Ë»òÑ­¼£¸ø¶¨£¬Ô¤Áô¸øºóĞøÀ©Õ¹£©
 float DifSpeedFilter = 0.0f;		// ×ªÏò½ÇËÙ¶ÈµÄÒ»½×µÍÍ¨ÂË²¨Öµ£¬ÒÖÖÆ±àÂëÆ÷Á¿»¯ÔëÉù
 float TurnTargetCmd  = 0.0f;		// ×ªÏòÄ¿±êÃüÁîÖµ£ºÒ¡¸Ë/Ñ­¼£/Ö±½Ç¸÷Ö§Â·¶¼Ğ´ÕâÀï£¨ÆÚÍûÖµ£©
 float TurnTargetRamp = 0.0f;		// ×ªÏòÄ¿±êĞ±ÆÂÖµ£ºÃ¿ 50ms Ïò Cmd ÏŞËÙ±Æ½ü£¬Êµ¼ÊÎ¹¸ø TurnPID.Target
-#define TURN_FF  10.0f						/* ×ªÏòÇ°À¡ÏµÊı£ºÄ¿±ê×ªËÙÖ±½Ó³ËËüµÃµ½ DifPWM µÄÇ°À¡Á¿
+#define TURN_FF  18.0f						/* ×ªÏòÇ°À¡ÏµÊı£ºÄ¿±ê×ªËÙÖ±½Ó³ËËüµÃµ½ DifPWM µÄÇ°À¡Á¿
                              * Ã»ÓĞÇ°À¡Ê± |TurnPID.Out| ºÜĞ¡Ê±²îËÙ²»¹»£¬×ªÏò»·»á"Õ³×¡"
-                             * 20->10£ºÇ°À¡Ì«´ó»áÈÃ DifPWM Ò»ÉÏÄ¿±ê¾Í±¥ºÍµ½ ¡À50£¬³µÂÖ´ò»¬/¶¶Õñ£»
-                             * ¼õ°ëºó¿¿×ªÏò»·ÂıÂı½¨Á¢²îËÙ£¬ÅäºÏÏÂÃæµÄĞ±ÆÂ¸üÆ½Ë³ */
+                             * ÀúÊ·£º20 -> 10 ÊÇÔÚ TURN_FB_SIGN ¼«ĞÔ»¹·´×ÅµÄÄê´ú´òµÄ²¹¶¡¡ª¡ª
+                             * ÄÇÊ± P Ïî·´Ïò¼Ó±¶Êä³ö£¬Ç°À¡ÔÙ´ó¾Í±¥ºÍ´ò»¬¡£2026-10-25 ¼«ĞÔĞŞÕıºó
+                             * P Ïî»Ø¹é×èÄá£¬´¿Ç°À¡ 10 Ö»ÄÜ½¨Á¢Ô¼ 0.6 ×ª/Ãë²îËÙ(Êµ²â±ê¶¨
+                             * 1 PWM ¡Ö 0.05 ×ª/Ãë)£¬×ªÍä±ÈĞŞÕıÇ°Ã÷ÏÔÂı£¬¹Ê 10 -> 18£º
+                             * ×ªÍäÊ± FF 18 + Æğ²½ P ÏîÔ¼ 24£¬½Ó½ü¾É¼«ĞÔÏÂ 22 µÄÊµ¼ÊÇı¶¯Á¦¡£
+                             * Æ«Èâ¼Óµ½ 20£¬´ò»¬/Ë¦Î²ÍËµ½ 15¡£ */
 #define TURN_SLEW  0.2f						/* ×ªÏòÄ¿±êÃ¿ 50ms ×î´ó±ä»¯Á¿£º0->Âú´ò(1.0)Ô¼Ğè 5 ÅÄ(250ms)£¬
                              * Ïû³ı TurnPID.Target ½×Ô¾µ¼ÖÂµÄ DifPWM 0->¡À50 Í»±ä³å»÷ */
 float SpeedTargetCmd  = 0.0f;		// Ç°½øËÙ¶ÈÄ¿±êÃüÁîÖµ(×ª/Ãë)£ºÑ­¼£ÄÇÒ»Ö§Ğ´ÕâÀï
@@ -212,13 +220,19 @@ float SpeedTargetRamp = 0.0f;		// Ğ±ÆÂºóµÄÇ°½øËÙ¶È£ºÕæÕıĞ´½ø SpeedPID.Target
                              * ³µÍ£ÎÈºóÄÇ·İ¸º»ı·ÖµÃÏÈµ¹¸É¾»²ÅÄÜÔÙÍùÇ°×ß ¡ª¡ª
                              * "Í£ÏÂÀ´ÈİÒ×¡¢ÔÙÆğ²½Âı°ëÅÄ"¾ÍÊÇÕâÃ´À´µÄ¡£ */
 #define TRACK_SEEN_MIN  4					/* ¿ÉĞÅÇø¼äÄÚ >= ÕâÃ´¶à¸öºÚÏñËØ = "Ïß»¹ÔÚ»­ÃæÀï"¡£
-                             * Êµ²âÕı³£Ïß¿í 16~30£¬ËùÒÔ 4 ÊÇºÜËÉµÄµØ°å£ºÖ»ÓĞÕæ¡¤¿Õ³¡²ÅËã¶ª¡£ */
-#define TURN_FB_SIGN  (1)    /* ×ªÏò·´À¡·ûºÅ£º+1=²»È¡·´£¬-1=È¡·´£»½ÓÏß/×°ÅäÅ¡·´Ê±ÓÃ
-                              * µ±Ç°Öµ +1£¬Óë joystick ÄÇÒ»Ö§µÄ Target = -RH/50.0 Ò»ÖÂ¡£
+                                             * Êµ²âÕı³£Ïß¿í 16~30£¬ËùÒÔ 4 ÊÇºÜËÉµÄµØ°å£ºÖ»ÓĞÕæ¡¤¿Õ³¡²ÅËã¶ª¡£ */
+#define TRACK_UNSEEN_MAX 5					/* µôÏß³ÙÖÍ£ºÁ¬ĞøÕâÃ´¶àÖ¡ºÚµãÊı < TRACK_SEEN_MIN ²Å°Ñ
+                                             * TrackLineSeen À­ 0(¼´ËÙ¶ÈÄ¿±ê¹é 0)¡£5 Ö¡ x 20ms = 100ms£¬
+                                             * ×ã¹»¿ç¹ıµ¥Ö¡/Ë«Ö¡µÄãĞÖµ¶¶¶¯£»»Ö¸´²»³ÙÖÍ(1 Ö¡¼´×ß)¡£ */
+#define TURN_FB_SIGN  (-1)   /* ×ªÏò·´À¡·ûºÅ£º+1=²»È¡·´£¬-1=È¡·´£»½ÓÏß/×°ÅäÅ¡·´Ê±ÓÃ
                               * ÅĞ¾İ£¨ºÜ¹Ø¼ü£©£ºÍ¬Ò»ÌõÍ¨Â·ÊÇ
                               *   Target -> DifPWM -> LeftPWM/RightPWM -> Êµ¼Ê×ªÏò -> DifSpeed
-                              * Òª±£Ö¤ Target ±ä´óÊ± DifSpeed Ò²Í¬Ïò±ä´ó£¬·ñÔò×ªÏò»·»áÕı·´À¡¡¢Ô½×ªÔ½Æ«£¬
-                              * Ò»Â·´òËÀ¡£joystick ÄÇÖ§ÄÜÕı³£×ªÏò£¬¾ÍËµÃ÷ÕâÒ»Ö§ÊÇ¶ÔµÄ¡£ */
+                              * Òª±£Ö¤ Target ±ä´óÊ± DifSpeed Ò²Í¬Ïò±ä´ó£¬·ñÔò×ªÏò»·»áÕı·´À¡¡¢Ô½×ªÔ½Æ«¡£
+                              * 2026-10-25 ´®¿ÚÊµ²â·­°¸£ºÖ±½ÇÓÒ×ª Target=-1.0 Ê± DifSpeed=+1.1¡¢
+                              * ×ó×ª Target=+1.0 Ê± DifSpeed=-0.9£¬¶ø Yaw Ö¤Êµ³µÈ·Êµ°´Ä¿±ê·½ÏòÔÚ×ª
+                              * ¡ª¡ª ·´À¡¼«ĞÔÒ»Ö±ÊÇ·´µÄ£¬P ÏîÔÚ·´Ïò¼Ó±¶Êä³ö(×ªÏò¿¨¶Ù/»­ÁúµÄ¸ùÔ´)¡£
+                              * Ô­×¢ÊÍ"joystick ÄÜÕı³£×ªÏò¾ÍËµÃ÷¼«ĞÔ¶Ô"ÊÇÎóÅĞ£ºÇ°À¡ TURN_FF Ö÷µ¼·½Ïò£¬
+                              * ¼«ĞÔ·´ÁË³µÕÕÑù×ª£¬Ö»ÊÇ P Ïî´Ó×èÄá±ä³ÉÁËÖúÈ¼¡£ */
 
 /* ---------- CCD Ñ­¼££ºÖ»¸Ä×ªÏòÄ¿±ê ----------
  * Ô¼¶¨£ºTurnPID.Target < 0 = ÓÒ×ª£¨Óë joystick ÄÇÒ»Ö§ÍêÈ«Ò»ÖÂ£©¡£
@@ -234,10 +248,15 @@ float SpeedTargetRamp = 0.0f;		// Ğ±ÆÂºóµÄÇ°½øËÙ¶È£ºÕæÕıĞ´½ø SpeedPID.Target
                                  * ÅĞ¾İ£º°ÑÏß·Å´«¸ĞÆ÷×ó°ë±ß£¬OLED ÉÏ TRK Ó¦ÏÔÊ¾¸ºÖµ£»
                                  *       ÈôÏÔÊ¾ÕıÖµËµÃ÷·ûºÅ·´ÁË£¬»áÕı·´À¡´òËÀ·½Ïò */
 #define TRACK_GAIN     1.2f     /* Æ«²î(Âú 63 ÏñËØ)¶ÔÓ¦µÄ×ªÏòÄ¿±ê£º1.2 ×ª/Ãë
-                                 *   Ç°À¡ TURN_FF x 1.2 = 12£¬¼Ó TurnPID ÏŞ·ù 30 Ò²¾Í 42£¬
-                                 *   ÔÙ±» ¡À50 µÄ DifPWM ÏŞ·ùÑ¹×¡£¬Æ«±£ÊØµ«¹»ÓÃ */
+                                 *   TURN_FF=18 Ê±ÂúÆ«Ç°À¡ 18x1.2=21.6£¬¼Ó TurnPID ÏŞ·ù 30 ¹² 51.6£¬
+                                 *   »á¶¥µ½ ¡À50 µÄ DifPWM ÏŞ·ù ¡ª¡ª ¼´×î´óÆ«²îÏÂ²îËÙ¸øÂú£¬¼±Íä¸üÓĞÁ¦£»
+                                 *   Ö±µÀ/»ºÍäÔ¶µ½²»ÁËÂúÆ«£¬²»ÊÜÓ°Ïì */
 #define TRACK_DEAD     2        /* ËÀÇø(ÏñËØ)£ºÑ¹×¡ CCD_Zhongzhi µÄ ¡À1 ¶¶¶¯£¬1 ÏñËØÎó²îÖ»²úÉú 0.25 PWM */
-#define TRACK_LOST_MAX 25       /* Á¬Ğø¶ªÏß¶àÉÙÖ¡²Å·ÅÆú£º25 Ö¡ x 40ms(CCD_Div=4) = 1s */
+#define TRACK_KD       3        /* ³¬Ç°×ªÏòÏµÊı£ºÆ«²î±ä»¯Á¿³ËËüµş½øÆ«²îÀï£¬µÈĞ§ÌáÇ° 2 Ö¡(40ms)×ªÏò£»
+                                 *   0 = ¹Øµô³¬Ç°£¬ÍË»Ø´¿±ÈÀıÑ­¼£ */
+#define TRACK_LEAD_MAX 12       /* ³¬Ç°Á¿ÏŞ·ù(ÏñËØ)£º·â×¡ÖĞÏßÁ¿»¯¶¶¶¯¹à½ø dErr µÄÔëÉùÉÏÏŞ */
+#define TRACK_LOST_MAX 50       /* Á¬Ğø¶ªÏß¶àÉÙÖ¡²Å·ÅÆú£º25 Ö¡ x 20ms(CCD_Div=2) = 0.5s
+                                   £¨Ô­ 40ms ÆØ¹âÊ±ÊÇ 1s£»ÏÓ·ÅÆúÌ«¿ì¾Í°´±ÈÀıÍùÉÏµ÷£© */
 #define TRACK_SPEED    0.5f    /* Ñ­¼£Ç°½øËÙ¶È£¨×ª/Ãë£©£¬Ö±½ÓĞ´ SpeedPID.Target
                                  *   Ò¡¸ËÄÇÒ»Ö§Ö»ÔÚ !TrackMode Ê±²ÅĞ´ SpeedPID.Target£¬
                                  *   Ñ­¼£Ä£Ê½ÏÂÃ»ÓĞËÙ¶ÈÊäÈë£¬Ä¿±êÖµÓÉÕâÀïÍ³Ò»¸ø
@@ -250,37 +269,45 @@ float SpeedTargetRamp = 0.0f;		// Ğ±ÆÂºóµÄÇ°½øËÙ¶È£ºÕæÕıĞ´½ø SpeedPID.Target
                                  *   ¾µÍ·/´«¸ĞÆ÷×°ÅäÓĞ¹Ì¶¨Æ«ÖÃ£¬Êµ²âÖĞĞÄÂäÔÚ 45~68 Ö®¼ä£¬È¡ÖĞÖµ 56£¬
                                  *   Æ« 7 ÏñËØ(Ö½ÃæÔ¼ 6mm)¡£ÓÃ 56 ¿ÉÒÔ°ÑÕâ¸ö×°ÅäÆ«ÖÃÖ±½Ó³Ôµô¡£
                                  * ±ê¶¨£º°Ñ³µ·ÅÕı¶Ô×¼Ö±Ïß£¬¿´ OLED ÉÏµÄ CCD_Zhongzhi£¬È¡Æ½¾ùÖµÌîÕâÀï¡£ */
-/* ---------- Ö±½Ç×ªÍä£ºÓÃ Yaw ÅĞ 90 ¶È ----------
+/* ---------- Ö±½Ç×ªÍä£º×ªµ½ CCD ÖØĞÂ×¥µ½ÏßÎªÖ¹ ----------
  *
  * Ö±½ÇÊÇÎ¨Ò»ĞèÒª×ª 90 ¶ÈµÄÍä¡£Ö±½Ç´¦ºÚÇø»áÃ÷ÏÔ±ä¿í£º
  *   Ïß¿í w = w0 / cos(theta)£¬theta Ô½´óÔ½¿í£¬½Ó½ü 90 ¶ÈÊ±Õû·ù¶¼¿ÉÄÜ±äºÚ¡£
  *   ËùÒÔÅĞ¾İ²»ÊÇ"ÖĞÏßÆ«ÁË¶àÉÙ"£¬¶øÊÇ"Á½²àÒ»±ßÓĞ¹ıÑØ¡¢ÇÒºÚµãÊıÃ÷ÏÔ¶àÓÚÖ±µÀ"¡£
  *
  * ×ªÍäÈÔÈ»Ğ´ TurnPID.Target£¬×ßÒÑ¾­µ÷ºÃµÄ×ªÏò»·£¬¶ø²»ÊÇÖ±½Ó¸ø PWM¡£
- * Yaw Ö»¸ºÔğÅĞ"Ê²Ã´Ê±ºòÍ£"£¨ÀÛ¼Æ×ª¹ı >= PIVOT_DEG£©£¬²»²ÎÓë×ªÏò¿ØÖÆ¡£
- * ×ªÍê½ø SETTLE£¬µÈ CCD ÖØĞÂÕÒµ½ÏßÔÙ»Ø CORNER_LINE¡£
+ * 2026-10-25 Æğ²»ÔÙ°´ Yaw Ó²×ª¹Ì¶¨½Ç¶È£ºPIVOT Ò»Ö±×ª£¬×ªµ½ CCD ×¥µ½ºÏ·¨
+ * Ï¸Ïß(Á¬Ğø PIVOT_LINE_FRAMES Ö¡ !CCD_Lost)¾ÍÁ¢¿Ì»ØÑ­¼£ ¡ª¡ª ×ª¶àÉÙ¶ÈÓÉ
+ * "¿´µ½ĞÂÏß"¾ö¶¨¡£Yaw Ö»Ê£Á½¸öÖ°Ôğ£º×ª¹ı PIVOT_MIN_DEG Ö®Ç°²»ĞÅ CCD
+ * (Æğ×ªÊ±¾ÉÏß/ºÚÇø»¹ºıÔÚ»­ÃæÀï£¬CCD_Lost ±¾À´¾ÍÊÇ 0£¬Á¢¿ÌĞÅËü»áÔ­µØÍË³ö)£¬
+ * ÒÔ¼° OLED ÉÏÏÔÊ¾ÀÛ¼Æ×ª½Ç¡£×ª²»µ½ÏßÒ²ÓĞ PIVOT_TIMEOUT_MS ±£µ×¡£
  *
- * ÈıÖÖ×´Ì¬£º
+ * Á½ÖÖ×´Ì¬£º
  *   CORNER_LINE   Õı³£Ñ­¼££¬Ë³±ãÃ¿Ö¡ÅĞÊÇ²»ÊÇÖ±½Ç
- *   CORNER_PIVOT  °´ Yaw ×ªÂú 90 ¶È£¨»ò³¬Ê±£©
- *   CORNER_SETTLE ×ªÍêÁË£¬µÈÏßÖØĞÂ³öÏÖÔÚ»­ÃæÀï
+ *   CORNER_PIVOT  ¶¨ËÙĞı×ª£¬µÈ CCD ×¥µ½ĞÂÏß£¨»ò³¬Ê±±£µ×£©
  */
 #define CCD_EDGE_LO        5        /* µÍ¶Ë±ßÑØÇøÆğµã(ÏñËØ 5..12)£ºÓëãĞÖµÍ³¼ÆÇø¼äÒ»ÖÂ£¬±Ü¿ªÁ½¶Ë»µµãÇø */
 #define CCD_EDGE_HI        115      /* ¸ß¶Ë±ßÑØÇøÆğµã(ÏñËØ 115..122) */
 #define EDGE_ZONE_N        8        /* Ã¿¶Ë²ÎÓë±í¾öµÄÏñËØÊı */
 #define EDGE_ZONE_DARK     5        /* ¶ËÇøÄÚ >= ÕâÃ´¶àÏñËØµÍÓÚãĞÖµ²ÅÅĞ"¸Ã¶ËÑ¹ºÚ"(8 È¡ 5 µÄÑÏ¸ñ¶àÊı) */
 #define CORNER_MIN_DARK    40       /* ÅĞÖ±½ÇÒªÇóµÄ×îÉÙºÚµãÊı£ºÌ«ÉÙËµÃ÷Ö»ÊÇÔëµã»òÀëÏß£¬²»ÊÇ¿íºÚÇø */
-#define CORNER_CONFIRM     2        /* Á¬ĞøÂú×ã¼¸Ö¡²ÅËãÕæÖ±½Ç£¨2 Ö¡ = 80ms£¬ÂËµôµ¥Ö¡ÔëÉù£© */
+#define CORNER_CONFIRM     2        /* Á¬ĞøÂú×ã¼¸Ö¡²ÅËãÕæÖ±½Ç£¨2 Ö¡ = 40ms£¬ÂËµôµ¥Ö¡ÔëÉù£© */
 #define T_MIN_DARK         100      /* ÅĞ T ×ÖÂ·¿ÚµÄºÚµãÊı£º¿ÉĞÅÇø¼äÒ»¹² 118 µã£¬Òª 100 µã·¢ºÚ
                                      * ²ÅËã"ºá¹áÕû·ùµÄºáÏß"£¬¶ø²»ÊÇÆÕÍ¨Ö±½ÇÄÇÖÖÖ»ºıµôÒ»²àµÄ¿íºÚÇø¡£
                                      * ÊµÅÜÆ«ËÉ/Æ«½ô¾Íµ÷Õâ¸öÊı£ºÎó°ÑÖ±½Çµ± T ¾Íµ÷´ó£¬T ÈÏ²»³ö¾Íµ÷Ğ¡¡£ */
-#define T_CONFIRM          2        /* Á¬Ğø¼¸Ö¡Âú×ã²ÅÈÏ T£¨2 Ö¡ = 80ms£© */
-#define PIVOT_RATE         1.0f     /* ×ªÍäÊ±Ğ´½ø TurnPID.Target µÄ×ªËÙ
-                                     *   ±È TRACK_GAIN µÄÂúÆ«(63 ÏñËØ)=1.2 ´óÒ»µµ£¬2.0 ÊÇ¼±×ª£»
-                                     *   Åä TURN_FF=10 Ô¼¸ø 10 µÄÇ°À¡²îËÙ£¬ÆäÓà¿¿×ªÏò»·²¹¡£
-                                     *   ×ªµÃÌ«ÃÍ»áË¦Î²/´ò»¬¾ÍÍùÏÂµ÷¡£ */
-#define PIVOT_DEG          85.0f    /* Ä¿±ê×ª½Ç(¶È) */
-#define PIVOT_TIMEOUT_MS   3000     /* ×ªÍä³¬Ê±£º×ª²»¶¯ÁË(´ò»¬/¿¨×¡)Ê±±£µ×ÍË³ö */
+#define T_CONFIRM          2        /* Á¬Ğø¼¸Ö¡Âú×ã²ÅÈÏ T£¨2 Ö¡ = 40ms£© */
+#define PIVOT_RATE         0.6f     /* ×ªÍäÊ±Ğ´½ø TurnPID.Target µÄ×ªËÙ
+                                     *   1.5(=540¡ã/s) ÊÇÊµ²â´ò»¬¼«ÏŞ(~0.9 ×ª/Ãë²îËÙ)µÄ 2~3 ±¶£º
+                                     *   2026-10-27 Ãæ¶ÔT×ÖÂ·¿ÚµÄ³é´¤ÈÕÖ¾Àï£¬ÃüÁîºã 1.5 ³ÖĞø 3 Ãë£¬
+                                     *   Êµ²â²îËÙÖ»ÔÚ +0.89 ~ -0.50 Ö®¼äÂÒ°Ú(Õ³»¬¼«ÏŞ»·)£¬
+                                     *   Yaw ¾»Î»ÒÆ½ö ~20¡ã£¬Ö±µ½ PIVOT_TIMEOUT ³¬Ê±¡£È¡ 0.6
+                                     *   (¡Ö216¡ã/s£¬×ª 85¡ã Ô¼ 0.4s) Áô 1/3 ¸½×ÅÓàÁ¿¡£
+                                     *   Åä TURN_FF=18 Ç°À¡Ô¼ 10.8£¬ÆäÓà¿¿×ªÏò»·²¹¡£ */
+#define PIVOT_MIN_DEG     45.0f    /* ×îĞ¡×ª½ÇÃÅ¼÷(¶È)£º×ª¹ıÕâÃ´¶à²Å¿ªÊ¼ĞÅ CCD µÄ"×¥µ½Ïß"¡£
+                                     * ²»ÊÇÓ²Í£½Ç ¡ª¡ª Í£²»Í£ÓÉ CCD ËµÁËËã£¬ÕâÀïÖ»ÊÇ·ÀÆğ×ªË²¼ä
+                                     * ¾ÉÏß/Ö±½ÇºÚÇø»¹Ã»³ö»­Ãæ¾Í±» CCD_Lost==0 Æ­»ØÈ¥¡£ */
+#define PIVOT_LINE_FRAMES 2        /* Á¬Ğø¼¸Ö¡×¥µ½ºÏ·¨Ï¸Ïß²ÅÍË³ö PIVOT£¨2 Ö¡ = 40ms£© */
+#define PIVOT_TIMEOUT_MS   3000     /* ×ªÍä³¬Ê±£º×ªÁË 3 Ãë»¹Ã»µÈµ½Ïß(´ò»¬/¿¨×¡/¶ªÏß)¾Í±£µ×»ØÑ­¼£ */
 #define PIVOT_ADVANCE_MS   0        /* ¿ªÊ¼ÀÛ¼Æ Yaw Ö®Ç°ÏÈ¿Õ×ß¶àÉÙ ms
                                      *
                                      * ÎªÊ²Ã´ÒªÁôÕâ¶Î£ºCCD ×°ÔÚ³µÍ·Ç°·½Ô¼ L ÀåÃ×´¦£¬Ô­µØĞı×ªÊ±´«¸ĞÆ÷µÄ¹ì¼£
@@ -309,12 +336,10 @@ float SpeedTargetRamp = 0.0f;		// Ğ±ÆÂºóµÄÇ°½øËÙ¶È£ºÕæÕıĞ´½ø SpeedPID.Target
  *   ¿´ OLED ²¨ĞÎÏÂÏİ³öÏÖÔÚ×ó°ë±ß»¹ÊÇÓÒ°ë±ß£¬¾ÍÄÜ¶¨ËÀ index µÄ·½Ïò¡£
  */
 #define CORNER_SIDE_SIGN   (+1)     /* +1 = Ñ¹ºÚ¶Ë¾ÍÊÇ×ªÍä·½Ïò£»-1 = È¡·´(µ±Ç°Êµ²â) */
-#define SETTLE_OK_FRAMES   2        /* ×ªÍêºóÁ¬Ğø¼¸Ö¡ÕÒµ½Ïß²ÅËãÎÈ×¡£¨2 Ö¡ = 80ms£© */
-#define SETTLE_TIMEOUT_MS  2000     /* ÕÒÏß³¬Ê±£º³¬Ê±¾ÍÇ¿ÖÆ»Ø CORNER_LINE£¬¿¿Ñ­¼£×Ô¼º¾À */
 
 /* ---- ×ªÍäÊ±µÄÇ°½øËÙ¶È£ºÈÃ³µ"Ò»±ß×ªÒ»±ßÍùÇ°×ß"£¬²»Í£ÔÚÖ±½ÇµãÉÏ -------------
  *
- * Ö±½Ç×ªÍäÒªÍ¬Ê±¹ÜÁ½¼şÊÂ£º×ª¶àÉÙ¶È(PIVOT_DEG)¡¢ÒÔ¼°×ªµÄÊ±ºò»¹ÍùÇ°×ß¶à¿ì¡£
+ * Ö±½Ç×ªÍäÒªÍ¬Ê±¹ÜÁ½¼şÊÂ£º×ª¶à¾Ã(µÈ CCD ×¥µ½ĞÂÏß)¡¢ÒÔ¼°×ªµÄÊ±ºò»¹ÍùÇ°×ß¶à¿ì¡£
  * ×ªÍäÆÚ¼ä SpeedPID.Target ÓÉ±¾ºê¸ø£¬²»ÔÙÊÇ 0 ¡ª¡ª Õâ¾ÍÊÇ"±£³ÖÇ°½ø"µÄÂäµã¡£
  *
  * ¾ö¶¨"¿´ÆğÀ´ÊÇ×ªÍä»¹ÊÇÔ­µØ´ò×ª"µÄÊÇ×ªÍä°ë¾¶£º
@@ -340,15 +365,20 @@ float SpeedTargetRamp = 0.0f;		// Ğ±ÆÂºóµÄÇ°½øËÙ¶È£ºÕæÕıĞ´½ø SpeedPID.Target
  *
  * Ä¬ÈÏ = TRACK_SPEED£ºÓë¼ÓÕâ¸öºêÖ®Ç°µÄĞĞÎªÖğ×Ö½ÚÒ»ÖÂ£¬·½±ãÏÈ¶ÔÕÕÅÜÒ»´Î¡£
  */
-#define CORNER_SPEED   TRACK_SPEED /* ×ªÍäÆÚ¼äÇ°½øËÙ¶È(×ª/Ãë)£»Ìî 0 ¾ÍÊÇÍ£ÔÚÖ±½Çµã£¬±ğÌî */
+#define CORNER_SPEED   0.2f    /* ×ªÍäÆÚ¼äÇ°½øËÙ¶È(×ª/Ãë)¡£²»Òª¸ú TRACK_SPEED ×ß£º
+                                 * TRACK_SPEED ÕÇµ½ 0.5 ºó£¬"0.5 Ç°½ø + ´ó²îËÙ"µÄºÏ³É²àÏò
+                                 * ¸½×ÅĞèÇóÂÖÌ¥¸ø²»ÁË£¬ÂÖ×ÓÖ±½Ó½øÈë´ò»¬(¼û PIVOT_RATE ×¢ÊÍÀï
+                                 * 2026-10-27 µÄ³é´¤ÈÕÖ¾)¡£×ªÍäÊ±ÊÕÓÍµ½ 0.2£¬ÈÃÂÖ×ÓÌù×¡µØÃæ¡£
+                                 * Ìî 0 ¾ÍÊÇÍ£ÔÚÖ±½Çµã£¬±ğÌî¡£ */
 
 #define CORNER_LINE        0u       /* Æ½Ê±Ñ­¼£ */
-#define CORNER_PIVOT       1u       /* ×ªÍäÖĞ£º°´ Yaw ×ª 90 ¶È */
-#define CORNER_SETTLE      2u       /* ×ªÍêÁË£¬µÈ CCD ÖØĞÂ×¥µ½Ïß */
+#define CORNER_PIVOT       1u       /* ×ªÍäÖĞ£º¶¨ËÙĞı×ª£¬µÈ CCD ×¥µ½ĞÂÏß£¨»ò³¬Ê±±£µ×£© */
 
 volatile uint8_t TrackMode    = 0;  /* 0 = Ò¡¸Ë×ªÏò£¬1 = CCD Ñ­¼££»'T'/'t' »ò PA5 °´¼üÇĞ»» */
 volatile uint8_t TrackLostCnt = 0;  /* Á¬Ğø¶ªÏßÖ¡Êı */
 volatile uint8_t TrackLineSeen = 0; /* ´æÔÚĞÔ£º±¾Ö¡»­ÃæÀïÓĞÃ»ÓĞºÚÏß£¨ÓëÖĞÏß¼¸ºÎÊÇ·ñÓĞĞ§ÎŞ¹Ø£© */
+static uint8_t TrackUnseenCnt = 0; /* Á¬ĞøÃ»ÏßµÄÖ¡Êı£º¸ø TrackLineSeen ×öµôÏß³ÙÖÍ */
+static int16_t TrackErrPrev = 0;    /* ÉÏÒ»Ö¡(È¥ËÀÇøºó)µÄÖĞÏßÆ«²î£¬ÓÃÓÚËãÆ«²î±ä»¯ÂÊ×ö³¬Ç°×ªÏò */
 
 volatile uint8_t CornerState = CORNER_LINE;
 volatile int8_t  CornerDir   = 0;   /* ±¾´ÎÖ±½ÇµÄ×ªÏò£º+1 = ÓÒ×ª£¬-1 = ×ó×ª
@@ -359,11 +389,9 @@ volatile int8_t  CornerDir   = 0;   /* ±¾´ÎÖ±½ÇµÄ×ªÏò£º+1 = ÓÒ×ª£¬-1 = ×ó×ª
 volatile float   YawTurned   = 0.0f;/* ±¾´Î×ª½ÇÀÛ¼ÆÖµ(¶È)£¬½øÈë PIVOT Ê±ÇåÁã */
 float    YawPrev     = 0.0f;        /* ÉÏÒ»ÅÄµÄ Yaw£¬ÓÃÀ´ËãÔöÁ¿ */
 uint16_t PivotTicks  = 0;           /* ×ªÍä¼ÆÊ±(ms) */
-uint16_t SettleTicks = 0;           /* SETTLE ¼ÆÊ±(ms) */
 uint8_t  CornerSeen  = 0;           /* Á¬ĞøÂú×ãÖ±½ÇÌõ¼şµÄÖ¡Êı */
 uint8_t  TSeen       = 0;           /* Á¬ĞøÂú×ã T ×ÖÂ·¿ÚÌõ¼şµÄÖ¡Êı */
-volatile uint8_t TCount = 0;        /* ±¾´ÎÑ­¼£×ß¹ı¼¸¸ö T£º1=×ó×ª85¶È£¬>=2=ÍËÑ­¼£Ô­µØÕ¾×¡ */
-uint8_t  SettleOk    = 0;           /* SETTLE Á¬ĞøÕÒµ½ÏßµÄÖ¡Êı */
+uint8_t  PivotOk     = 0;           /* PIVOT ÖĞÁ¬Ğø×¥µ½ÏßµÄÖ¡Êı£¨CCD ½Ó¹Ü×ªÍäµÄÅĞ¾İ£© */
 
 /* ---------- ×ÔÆğÁ¢(Self-Erect)²ÎÊı ---------- */
 #define ERECT_PWM        100		/* Ë¦ÂÖ PWM(0~100)£ºÌ«´ó³µÂÖ´ò»¬£¬Ì«Ğ¡Ë¦²»ÆğÀ´ */
@@ -376,11 +404,54 @@ uint16_t ErectTime = 0;			/* ±¾´Î ERECT ÒÑ¾­ÅÜÁË¶àÉÙ ms£¬Ã¿ 10ms ¼ÓÒ»´Î£»Ò²ÓÃÓÚ 
 #define ERECT_DIR        (1)		/* Ë¦ÂÖ·½Ïò£º1 = ÓëÆ½ºâ»·Í¬ºÅ(Ä¬ÈÏ)£¬-1 = È¡·´(Ô­µØ×ªÈ¦/Ä¥Ì¥Ê±ÓÃ) */
 #define ERECT_PULSE_MS   400			/* Âö³åÄ£Ê½£ºÃ¿¸öÖÜÆÚÍ¨µç¶àÉÙ ms£»0 = Á¬ĞøÍ¨µç(Ò»Ö±Ë¦) */
 #define ERECT_PERIOD_MS  500		/* Âö³åÖÜÆÚ(ms)£ºÍ¨µç 400ms + ¶Ï¿ª 100ms */
-static uint16_t Count2 = 0;			/* 10ms ¼ÆÊı£¬µ±Ç°Î´Ê¹ÓÃ */
 float LeftSpeed, RightSpeed;		/* ×ó/ÓÒÂÖËÙ¶È£¨×ª/Ãë£© */
 float AveSpeed, DifSpeed;			/* Æ½¾ùËÙ¶È¡¢²îËÙ */
 
 float G = 0.00;						/* ½Ç¶È¼Æ°²×°½ÇµÄ±ê¶¨Æ«ÖÃ(¶È)£º²¹³¥³µÉí»úĞµ°²×°ÇãĞ±£¬¿ÉÓÃÀ¶ÑÀ slider G ÔÚÏß¸Ä */
+
+/* ================== µç³ØµçÑ¹¼ì²â ==================
+ * Ó²¼ş£ºµç³Ø +12V ¾­ 10k(ÉÏ)/2.7k(ÏÂ) ·ÖÑ¹½Ó PA7 (ADC1_IN7)£¬
+ *   ·ÖÑ¹±È (10+2.7)/2.7 = 4.704£º12.6V(3S Âú) -> 2.68V£¬¶¼ÔÚ 3.3V Á¿³ÌÄÚ¡£
+ * Èí¼şÉÏ ADC1 Óë CCD ¹²ÓÃ£ºCCD ÔÚ TIM3 ÖĞ¶ÏÀï²É IN4(Ã¿ CCD_Div ÅÄÒ»Ö¡)£¬
+ *   ÕâÀïÔÚÖ÷Ñ­»·²É IN7¡£Á½´¦¶¼¿¿ HAL_ADC_ConfigChannel ÇĞÍ¨µÀ£¬²¢·¢·ÃÎÊ»á
+ *   »¥Ïà²È£¨ÖĞ¶Ï°ÑÍ¨µÀÇĞ×ß -> CCD Ö¡Àï»ì½øµç³ØµçÑ¹£¬»òµç³Ø²Éµ½°ë½Ø CCD Öµ£©£¬
+ *   ËùÒÔ²ÉÑùÈ«³Ì¹Øµô TIM3 ¸üĞÂÖĞ¶Ï(Ô¼ 0.3ms£¬¿ØÖÆ½ÚÅÄ×î¶àÍÆ³ÙÕâÒ»µãµã)£¬
+ *   ²ÉÍê°ÑÍ¨µÀÅä»Ø IN4 + 1.5 ÖÜÆÚ²ÉÑù£¬»Ö¸´ CCD µÄÔ­¹¤×÷×´Ì¬¡£ */
+#define BAT_ADC_CH        ADC_CHANNEL_7
+#define BAT_DIV_RATIO     4.7037f   /* (10+2.7)/2.7 ·ÖÑ¹±È */
+#define BAT_LOW_V         10.5f     /* 3S ¿÷µç¾¯½äÏß(V)£ºµÍÓÚËüÆÁÉÏµçÑ¹Ç°×ºÏÔÊ¾ '!' */
+#define BAT_SAMPLE_MS     500u      /* ¶à¾Ã²ÉÒ»ÂÖ(ms)£ºµçÑ¹±ä»¯Âı£¬500ms ×ã¹» */
+float BatVoltage = 0.0f;            /* µç³ØµçÑ¹(V)£º8 ´ÎÆ½¾ù + IIR Æ½»¬ºóµÄÏÔÊ¾Öµ */
+
+static float Bat_ReadVoltage(void)
+{
+    ADC_ChannelConfTypeDef sConfig = {0};
+    uint32_t sum = 0;
+    int k;
+
+    __HAL_TIM_DISABLE_IT(&htim3, TIM_IT_UPDATE);   /* Óë CCD µÄ²É¼¯ÖĞ»¥³â(¼ûÉÏ·½×¢ÊÍ) */
+
+    sConfig.Channel = BAT_ADC_CH;
+    sConfig.Rank = ADC_REGULAR_RANK_1;
+    sConfig.SamplingTime = ADC_SAMPLETIME_239CYCLES_5;   /* ·ÖÑ¹Ô´×è¿¹Ô¼ 2.1k£¬ÓÃ×î³¤²ÉÑùÊ±¼ä»»¾«¶È */
+    HAL_ADC_ConfigChannel(&hadc1, &sConfig);
+
+    for (k = 0; k < 8; k++)
+    {
+        HAL_ADC_Start(&hadc1);
+        HAL_ADC_PollForConversion(&hadc1, 2);
+        sum += HAL_ADC_GetValue(&hadc1);
+    }
+
+    /* Åä»Ø CCD ÓÃµÄ IN4 + 1.5 ÖÜÆÚ(Óë MX_ADC1_Init ÍêÈ«Ò»ÖÂ)£¬·ñÔòÏÂÒ»Ö¡ CCD ²ÉµÄÊÇµç³Ø */
+    sConfig.Channel = ADC_CHANNEL_4;
+    sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
+    HAL_ADC_ConfigChannel(&hadc1, &sConfig);
+
+    __HAL_TIM_ENABLE_IT(&htim3, TIM_IT_UPDATE);   /* ²»Çå UIF£º´°¿ÚÄÚ×²ÉÏµÄÄÇÒ»ÅÄÕÕ³£²¹ÅÜ£¬Ö»Íí 0.3ms */
+
+    return (float)sum / 8.0f * 3.3f / 4095.0f * BAT_DIV_RATIO;
+}
 
 /* ---------- Èı¸ö PID µÄ½á¹¹Ìå£º¶¨ÒåÊ±Ö±½Ó¸ø³ÉÔ±¸³³õÖµ ----------
  * ×¢Òâ PID_Update() µÄÁ½¸öĞĞÎª£¨¼û pid.c£©£º
@@ -408,11 +479,11 @@ PID_t SpeedPID =  					// ËÙ¶È»·£ºÊäÈë AveSpeed(×ª/Ãë)£¬Êä³ö AnglePID.Target(Ä¿±
     .Ki = 0.21,						// »ı·ÖÏµÊı
     .Kd = 0,						// Î¢·ÖÏµÊı
 
-    .OutMax = 5,					// Êä³öÏŞ·ù 5 ¶È£ºÌ«´ó³µ»á´ó·ùÇ°ºóÇã£¬5 ¶ÈÔ¼ºÏ 10 ¸öÂö³å
-    .OutMin = -5,					
+    .OutMax = 2,					// Êä³öÏŞ·ù 5 ¶È£ºÌ«´ó³µ»á´ó·ùÇ°ºóÇã£¬5 ¶ÈÔ¼ºÏ 10 ¸öÂö³å
+    .OutMin = -3,					
 	
-	.ErrorIntMax = 150,				// »ı·ÖÏŞ·ù
-	.ErrorIntMin = -150,			// »ı·ÖÏŞ·ù
+	.ErrorIntMax = 10,				// »ı·ÖÏŞ·ù
+	.ErrorIntMin = -15,			// »ı·ÖÏŞ·ù
 
 };
 PID_t TurnPID =  					// ×ªÏò»·£ºÊäÈë²îËÙ£¬Êä³ö DifPWM
@@ -471,6 +542,8 @@ void PID_ResetAll(void)
     SpeedTargetCmd  = 0.0f;
     SpeedTargetRamp = 0.0f;
     TrackLineSeen   = 0;   /* ¸´Î»ºóÏÈ°´"Ã»¿´¼ûÏß"´¦Àí£¬µÈµÚÒ»Ö¡ CCD ÖØĞÂÈ·ÈÏ£¬±ÜÃâÆğ²½ÏÈ³åÒ»¶Î */
+    TrackUnseenCnt  = 0;   /* µôÏß³ÙÖÍ¼ÆÊıÒ»²¢ÇåÁã */
+    TrackErrPrev    = 0;   /* Æ«²îÀúÊ·Ò»²¢ÇåÁã£¬ÃâµÃÖØÆôÑ­¼£µÄµÚÒ»Ö¡Ëã³öÒ»¸ö¼ÙµÄ±ä»¯ÂÊ */
 
     /* Ö±½Ç×ªÍä×´Ì¬Ò»²¢¸´Î»£ºË¤³µ / ¼±Í£ / ÆğÁ¢ ¶¼»á¾­¹ıÕâÀï¡£
      * ·ñÔòÏÂ´ÎÊÕµ½ "1" Ê±»á´ø×ÅÉÏÒ»ÂÖµÄ PIVOT ×´Ì¬ÉÏ³¡£¬Æ¾Ëü×ªÒ»¸ö 90 ¶È¡£ */
@@ -478,12 +551,9 @@ void PID_ResetAll(void)
     CornerDir      = 0;
     CornerSeen     = 0;
     TSeen          = 0;
-    TCount         = 0;   /* Ë¤³µ/¼±Í£/ÆğÁ¢¶¼ËãÖØĞÂ¿ªÊ¼Ò»ÂÖ£¬T ¼ÆÊı¹éÁã£¬
-                           * ÃâµÃÉÏÒ»ÂÖ×ßµ½Ò»°ë±ÀÁË£¬ÏÂ´ÎÒ»ÉÏÀ´¾Í°ÑµÚ¶ş¸ö T µ±³ÉÖÕµã */
     YawTurned      = 0.0f;
     PivotTicks     = 0;
-    SettleTicks    = 0;
-    SettleOk       = 0;
+    PivotOk        = 0;
 }
 
 void Angle_Realign(void)
@@ -501,7 +571,7 @@ void Angle_Realign(void)
     for (k = 0; k < 30; k++)              /* 30 x 10ms = 300ms */
     {
         MPU6050_GetData(&AX, &AY, &AZ, &GX, &GY, &GZ);
-        sum += (int32_t)(-atan2(AY, AZ) / 3.14159 * 180.0);
+        sum += (int32_t)(-atan2f((float)AY, (float)AZ) * (180.0f / 3.14159265f));
         HAL_Delay(10);
     }
 
@@ -590,6 +660,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
         KeyFlag = 1;
     }
 }
+/* µ÷ÊÔÓÃ£º×´Ì¬ÃûËõĞ´¡£½ö±»×¢ÊÍµôµÄ OLED ĞĞÒıÓÃ£¬±£Áô£¨ÎğÇå£© */
 static const char *StateStr(void)
 {
     if (CarState == ST_BALANCE) return "BAL";
@@ -598,41 +669,31 @@ static const char *StateStr(void)
 }
 
 /* ==========================================================================
- * TIM3 ÖĞ¶Ï£ºÕû¸öÏµÍ³Î¨Ò»µÄÊ±¼ä»ù×¼£¨10ms£©
- *   tim.c: Prescaler = 72-1, Period = 10000-1  ->  72MHz/72/10000 = 10ms
+ * ===== ÊµÊ±¿ØÖÆÈı¶ÎÊ½£¨¶¼ÓÉ TIM3 »Øµ÷·ÖÆµµ÷ÓÃ£¬ÏÈºóË³Ğò¼´Ö´ĞĞË³Ğò£©=====
  *
- * ·Ö¶Î£¨·ÖÆµÖµÓÃ TICK_10MS / TICK_50MS ±íÊ¾£©£º
- *   Ã¿ 1 ÅÄ    hcount++£¬ÅÄÄ©°´ CCD_Div ²ÉÒ»Ö¡ CCD
- *   Ã¿ 10ms    ¶Á MPU6050 -> ×ËÌ¬ÈÚºÏ -> Æ«º½»ı·Ö -> Ö±Á¢»· / ÆğÁ¢»·
- *   Ã¿ 50ms    ¶Á±àÂëÆ÷ -> ËãËÙ¶È -> ËÙ¶È»· + ×ªÏò»·
- *   Ã¿ 1 ÅÄÄ©  ²ÉÒ»Ö¡ CCD£¨Ô¼ 0.7ms£©
+ *   Tick10_Attitude()   Ã¿ 10ms£º¶Á MPU6050 -> ×ËÌ¬ÈÚºÏ -> Æ«º½»ı·Ö
+ *                              -> Æ«º½ÔöÁ¿/×ªÍä¼ÆÊ± -> Ö±Á¢»·»òÆğÁ¢»· -> Ğ´ PWM
+ *   Tick50_SpeedTurn()  Ã¿ 50ms£º¶Á±àÂëÆ÷ -> ËãËÙ¶È -> ËÙ¶È»· + ×ªÏò»·
+ *   Ccd_Frame()         Ã¿ CCD_Div ÅÄ(µ±Ç° 20ms)£º²ÉÒ»Ö¡ CCD
+ *                              -> ´æÔÚĞÔ/Ö±½Ç/T ÅĞ¶¨ -> Ğ´×ªÏòÄ¿±ê
+ *   ·Ö·¢²ãÔÚÎÄ¼şÏÂ·½ HAL_TIM_PeriodElapsedCallback()£¬Ö»×ö·ÖÆµºÍµ÷ÓÃ
  *
- * Ê±¼äÔ¤Ëã£¨Ò»ÅÄ = 10ms£©£º
+ * Ê±¼äÔ¤Ëã£¨Ò»ÅÄ = 10ms£¬×î»µÇé¿ö¼¸¶ÎÈ«×²ÉÏ£©£º
  *   MPU6050 Ò»´Î I2C Í»·¢¶Á    ~150us
- *   ×ËÌ¬ÈÚºÏ + Æ«º½»ı·Ö         ~70us
- *   CCD Ò»Ö¡Ô¼Îª 1/CCD_Div      ~700us  -> °´ CCD_Div=4 Ì¯¿ªÔ¼ 175us
- *   Ğ¡¼Æ                       ~520us / 10ms Ô¼ 5.2%
- *   ×î»µÒ»ÅÄ£¨ÕıºÃÅöÉÏ CCD£©   ~1.0ms = 10%£¬»¹ÓĞÓàÁ¿
+ *   ×ËÌ¬ÈÚºÏ + Æ«º½»ı·Ö         ~70us£¨ÒÑÈ« float£¬¼ûº¯ÊıÄÚ×¢ÊÍ£©
+ *   CCD Ò»Ö¡                    ~700us£¨Ã¿ CCD_Div ÅÄ²ÅÀ´Ò»´Î£©
+ *   Ğ¡¼ÆÔ¼ 1.0ms = 10%£¬»¹ÓĞÓàÁ¿
  * ========================================================================== */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+static void Tick10_Attitude(void)
 {
-    if (htim != &htim3)
-    {
-        return;
-    }
-
-    hcount++;
-    __HAL_TIM_CLEAR_IT(&htim3, TIM_IT_UPDATE);
-
-    if (hcount >= TICK_10MS)                          /* ===== 10ms ¶Î ===== */
-    {
-        hcount = 0;
         MPU6050_GetData(&AX, &AY, &AZ, &GX, &GY, &GZ);   /* Ò»´Î I2C Í»·¢¶Á 14 ×Ö½Ú£¬Ô¼ 150us */
         /* ¶ÁÈ¡ X ÖáÁãÆ«£º+10 LSB Ô¼ 0.61¡ã/s£¬ÓÃÀ´²¹³¥Ó²¼şµÄ¹ÌÓĞÆ«ÖÃ */
         GX += 10;
 
-        /* ÓÃ¼ÓËÙ¶È¼ÆËã½Ç¶È£ºatan2 ³öÀ´µÄ¾ÍÊÇÇã½Ç£¬G ÊÇ»úĞµ°²×°²¹³¥ */
-        AngleAcc = -atan2(AY, AZ) / 3.14159 * 180 + G;
+        /* ÓÃ¼ÓËÙ¶È¼ÆËã½Ç¶È£ºatan2 ³öÀ´µÄ¾ÍÊÇÇã½Ç£¬G ÊÇ»úĞµ°²×°²¹³¥¡£
+         * ÓÃ atan2f ¶ø²»ÊÇ atan2£ºint ²ÎÊı»á±»ÌáÉı³É double ×ßÈí¸¡µã£¬
+         * M3 ÎŞ FPU Ê±ÂıÔ¼ 5 ±¶£»float ¾«¶È(Ô¼ 7 Î»)¶ÔÇã½Ç´Â´ÂÓĞÓà¡£ */
+        AngleAcc = -atan2f((float)AY, (float)AZ) * (180.0f / 3.14159265f) + G;
 
         /* »¥²¹ÂË²¨ Alpha=0.001£º
          *   ¼ÓËÙ¶È¼Æ³¤ÆÚ×¼¡¢¶ÌÆÚÔëÉù´ó£¨³µÌåÕñ¶¯£©
@@ -640,7 +701,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
          *   Ê±¼ä³£Êı = 1/(Alpha*100Hz) = 10s£¬¼´ 10s ÄÚÏàĞÅÍÓÂİÒÇ£¬10s ÍâÀ­»Ø¼ÓËÙ¶È¼Æ
          * ÕâÀïµÄ Gyro ·ÖÖ§ÊÇ"ÓÃÉÏÒ»ÅÄ Angle ¼õÈ¥½ÇËÙ¶È»ı·Ö"µÄĞ´·¨£¬
          *   dt Ö±½ÓĞ´ 0.01£¬ÒòÎª±¾»Øµ÷¾ÍÊÇ 10ms Ò»ÅÄ¡£ */
-        AngleGyro = Angle - GX / 32768.0 * 2000 * 0.01;
+        AngleGyro = Angle - (float)GX * (2000.0f * 0.01f / 32768.0f);   /* ³£Á¿ÕÛµş³ÉÒ»´Î float ³Ë·¨ */
         float Alpha = 0.001f;
         Angle = Alpha * AngleAcc + (1 - Alpha) * AngleGyro;
 
@@ -650,7 +711,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
          *   1) ÓÃ YAW_LSB_PER_DPS °Ñ LSB »»³É ¡ã/s
          *   2) ¼õµôÁãÆ«£¬¹ıËÀÇøÑ¹µô¾²Ö¹Æ¯ÒÆ
          *   3) °´¹Ì¶¨ dt »ı·Ö */
-        YawRate = GZ / YAW_LSB_PER_DPS - YAW_BIAS_DPS;
+        YawRate = (float)GZ * (1.0f / YAW_LSB_PER_DPS) - YAW_BIAS_DPS;  /* 1/16.384 ÊÇ¶ş½øÖÆ¾«È·Öµ£¬³ı·¨ÕÛ³Ë·¨ÍêÈ«µÈ¼Û */
         if (YawRate > -YAW_DEADZONE_DPS && YawRate < YAW_DEADZONE_DPS) YawRate = 0.0f;
         Yaw += YawRate * YAW_DT;
 #if YAW_WRAP
@@ -658,13 +719,13 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         else if (Yaw < -180.0f) Yaw += 360.0f;
 #endif
 
-        /* ---------- Æ«º½ÔöÁ¿ + Ö±½Ç×ªÍäÅĞ¾İ ----------
+        /* ---------- Æ«º½ÔöÁ¿ + Ö±½Ç×ªÍä¼ÆÊ± ----------
          * Yaw Ã¿ÅÄ¹éÒ»µ½ ¡À180¡ã£¬ÓÃÔöÁ¿ dYaw ÀÛ¼Ó³ö"±¾´Î×ª¹ı¶àÉÙ¶È"¸üÎÈ£º
          * ±ÈÈç´Ó 179 ¶ÈÔÙ×ª 90 ¶È»á±ä³É -91 ¶È£¬Ö±½ÓÏà¼õµÃµ½ 270 ¶È£¬
          * ÓÃÔöÁ¿ÀÛ¼Ó¾ÍÊÇ 90 ¶È¡£
-         * ÅĞ¾İÖ»¿´"ÀÛ¼Æ×ª¹ı¶àÉÙ"£¬×ªÂú PIVOT_DEG ¾ÍÍ£¡£
-         * ÔöÁ¿¼ÆËã·ÅÔÚ 10ms ½ÚÅÄÀï£¬±È CCD Ö¡(40ms)Ï¸ 4 ±¶£»
-         * ÈôÖ»ÔÚ 40ms ¸üĞÂÒ»´Î£¬120 ¶È/ÃëµÄ×ªËÙ¾ÍÒªÂ©µô 4.8 ¶È¡£ */
+         * ÀÛ¼Æ½ÇÏÖÔÚÖ»µ± PIVOT_MIN_DEG ÃÅ¼÷ÓÃ(·ÀÆğ×ªË²¼ä±»¾ÉÏßÆ­ÍË)£¬²»ÔÙµ±Í£×ªÌõ¼ş
+         * ¡ª¡ª Í£²»Í£ÓÉ CCD ¶ÎÅĞ"×¥µ½ĞÂÏß"¾ö¶¨£»ÕâÀïÖ»Áô³¬Ê±±£µ×¡£
+         * ÔöÁ¿¼ÆËã·ÅÔÚ 10ms ½ÚÅÄÀï£¬±È CCD Ö¡Ï¸£¬»ı·Ö²»¶ª½Ç¡£ */
         {
             float dYaw = Yaw - YawPrev;
 
@@ -676,23 +737,17 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
             {
                 PivotTicks += 10;
 
-                /* Ç°À¡¶Î£ºµÈ³µÍ·Ô½¹ıÖ±½ÇÖ®ºóÔÙ¿ªÊ¼ÀÛ¼Æ Yaw µÄ½Ç¶È£¬¼û PIVOT_ADVANCE_MS¡£
-                 * ×ªÍäÖ»¿´"¿ªÊ¼×ªÖ®ºó"µÄÔöÁ¿£¬ËùÒÔÇ°ÃæµÄÆ«ÒÆ²»¼ÆÈë 90 ¶È¡£ */
+                /* Ç°À¡¶Î£ºµÈ³µÍ·Ô½¹ıÖ±½ÇÖ®ºóÔÙ¿ªÊ¼ÀÛ¼Æ Yaw µÄ½Ç¶È£¬¼û PIVOT_ADVANCE_MS */
                 if ((int32_t)PivotTicks >= (int32_t)PIVOT_ADVANCE_MS)
                     YawTurned += dYaw;
 
-                if (((int32_t)PivotTicks >= (int32_t)PIVOT_ADVANCE_MS && fabsf(YawTurned) >= PIVOT_DEG)
-                    || (int32_t)PivotTicks >= (int32_t)(PIVOT_ADVANCE_MS + PIVOT_TIMEOUT_MS))
+                if ((int32_t)PivotTicks >= (int32_t)(PIVOT_ADVANCE_MS + PIVOT_TIMEOUT_MS))
                 {
-                    CornerState    = CORNER_SETTLE;   /* ×ª½Ç¹»ÁË£º½ø SETTLE µÈÏß */
-                    SettleTicks    = 0;
-                    SettleOk       = 0;
+                    CornerState    = CORNER_LINE;   /* ±£µ×£º×ªÌ«¾Ã»¹Ã»µÈµ½Ïß£¬»ØÑ­¼£×Ô¼º¾À */
                     TurnTargetCmd  = 0.0f;
+                    CornerSeen     = 0;
+                    PivotOk        = 0;
                 }
-            }
-            else if (CornerState == CORNER_SETTLE)
-            {
-                if (SettleTicks < 60000u) SettleTicks += 10;
             }
         }
 
@@ -774,14 +829,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
             TB6612_setPWM(1, 0);
             TB6612_setPWM(2, 0);
         }
-    }
+}
 
-    Count1 ++;				// ÅÄ¼ÆÊı
-
-    if (Count1 >= TICK_50MS)		/* ===== 50ms ¶Î£ºËÙ¶È»· + ×ªÏò»· ===== */
-    {
-        Count1 = 0;			// µ½µãÇåÁã
-
+/* ---- 50ms ¶Î£º¶Á±àÂëÆ÷ -> ËãËÙ¶È -> ËÙ¶È»· + ×ªÏò»·£¨TIM3 »Øµ÷·ÖÆµµ÷ÓÃ£©---- */
+static void Tick50_SpeedTurn(void)
+{
         /* ±àÂëÆ÷Ã¿ 50ms ¶ÁÒ»´Î£¬Ëã³ö×ªËÙ£º
          *   ReadSpeed() ·µ»Ø (short)CNT µÄ²îÖµ
          *   44   = ±àÂëÆ÷Ò»È¦µÄÂö³åÊı
@@ -789,11 +841,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
          *   30   = ¼õËÙ±È
          *   -> µÃµ½"×ª/Ãë"
          * ÓÒÂÖÈ¡¸ººÅ£ºÁ½ÂÖ±àÂëÆ÷°²×°·½ÏòÏà·´£¬Í³Ò»³É"Ç°½øÎªÕı" */
-        LeftSpeed = ReadSpeed(&htim2) / 44.0 / 0.05 / 30;
-        RightSpeed = -ReadSpeed(&htim4) / 44.0 / 0.05 / 30;
+        LeftSpeed  = (float)ReadSpeed(&htim2) * ENC_TO_RPS;
+        RightSpeed = (float)(-ReadSpeed(&htim4)) * ENC_TO_RPS;
 
         /* ÇóÆ½¾ùÓë²îËÙ */
-			AveSpeed = (LeftSpeed + RightSpeed) / 2.0;	
+			AveSpeed = (LeftSpeed + RightSpeed) * 0.5f;	
 			DifSpeed = TURN_FB_SIGN * (LeftSpeed - RightSpeed);			
 			
         /* ---- ×ªÏòÄ¿±êĞ±ÆÂÏŞËÙ£ºÃ¿ 50ms ×î¶à±ä TURN_SLEW£¬°Ñ Cmd ½¥±äËÍµ½ Ramp ----
@@ -818,21 +870,24 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
  * ¹éÁã¸Ä³ÉĞ±ÆÂ(¼û SPEED_SLEW)£ºÍ£ÊÇ"¼õËÙµ½Í£"£¬ÔÙÆğ²½Ò²²»±ØÏÈ°Ñ·´Ïò»ı·Öµ¹¸É¾»¡£
  * ×¢Òâ×ªÏòÄÇÒ»Â·ÈÔÈ»°´ CCD_Lost ×ß(ÏÂÃæ TrackLostCnt ÄÇ¶Î)£º»µÖĞÏß²»ĞíÓÃÀ´´ò¶æ¡£ */
 				if (TrackMode)
+				{
+					float dSpd;
+
 					SpeedTargetCmd = (CornerState != CORNER_LINE) ? CORNER_SPEED
 					               : (TrackLineSeen ? TRACK_SPEED : 0.0f);
 
-				/* Ğ±ÆÂÎŞÌõ¼şÅÜ(²»ÔÚ TrackMode ÃÅ½ûÀï)£ºÒ¡¸ËÄÇÁ½Ö§ÏÖÔÚÒ²¸ÄĞ´ SpeedTargetCmd£¬
-				 * ²»ÔÙÖ±½ÓĞ´ SpeedPID.Target¡£ÕâÑù"ÍË³öÑ­¼£"Ö»Òª°ÑÃüÁîÖÃ 0£¬¾ÍÄÜÑØÍ¬Ò»Ìõ
-				 * Ğ±ÆÂ¼õËÙÕ¾×¡£»·ñÔò TrackMode Ò»¹Ø£¬SpeedPID.Target »á¶³½áÔÚ×îºóÒ»¸öÖµ
-				 * (Ñ­¼£µÄ 0.5)ÉÏ£¬³µ»áÕÕ¾ÉÖ±ĞĞ¶ø²»ÊÇÍ£ÏÂÀ´¡£ */
-				{
-					float dSpd = SpeedTargetCmd - SpeedTargetRamp;
-
+					dSpd = SpeedTargetCmd - SpeedTargetRamp;
 					if      (dSpd >  SPEED_SLEW) SpeedTargetRamp += SPEED_SLEW;
 					else if (dSpd < -SPEED_SLEW) SpeedTargetRamp -= SPEED_SLEW;
 					else                         SpeedTargetRamp  = SpeedTargetCmd;
+
+					SpeedPID.Target = SpeedTargetRamp;
 				}
-				SpeedPID.Target = SpeedTargetRamp;
+				else
+				{
+					/* ²»Ñ­¼£Ê±°ÑĞ±ÆÂ¸úµ½Êµ¼Ê³µËÙÉÏ£¬ÇĞ½øÑ­¼£ÄÇÒ»ÅÄ²»»áÍ»È»Ìø±ä */
+					SpeedTargetRamp = AveSpeed;
+				}
 
 /* ËÙ¶È»· PID ¼ÆËã */
 				SpeedPID.Actual = AveSpeed;			
@@ -846,36 +901,21 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 				PID_Update(&TurnPID);				// ×ªÏò PID ¼ÆËã
 				DifPWM = (int16_t)(TurnPID.Out + TURN_FF * TurnPID.Target);	/* ×ªÏòÊä³ö + ×ªÏòÇ°À¡ */
 				if (DifPWM > 50) DifPWM = 50; else if (DifPWM < -50) DifPWM = -50;	/* ÏŞ·ù ¡À50£ºÇ°À¡+·´À¡µş¼Ó»á³¬ */
-
         }
+}
 
-    }
-
-
-    /* Æ½ºâÖĞ¶Ï£º|Angle| ³¬¹ı ERECT_START_ANG -> StopCar() Í£³µ»Ø IDLE¡£
-     * Õâ¸öÅĞ¶ÏÃ¿ 1ms ¶¼Ö´ĞĞ£¬µ« Angle ÊÇ 10ms ²Å¸üĞÂÒ»´Î£¬Êµ¼ÊÏìÓ¦Ô¼ 10ms¡£
-     * StopCar() ÄÚ²¿»áµ÷ PID_ResetAll()£¬ÏÂ´ÎÊÕµ½ "1" Ê± StartErect()
-     * »áÏÈ×ö Angle_Realign() ÖØĞÂ¶Ô×¼½Ç¶È¡£ */
-    if (CarState == ST_BALANCE && fabsf(Angle) > ERECT_START_ANG)
-    {
-        StopCar();
-    }
-
-    /* ================= CCD ²ÉÑùÓëÖ±½ÇÊ¶±ğ£¨·ÅÔÚÃ¿ÅÄÄ©Î²£©=================
-     * Î»ÖÃºÜ¹Ø¼ü£ºËüÅÅÔÚ AnglePID -> AvePWM -> TB6612_setPWM Ö®ºó£¬
-     * ËùÒÔ 50ms ¶ÎËãºÃµÄ DifPWM ÒÑ¾­Ğ´½øµç»úÁË£¬ÔÙ»¨ ~0.7ms ²ÉÒ»Ö¡Ò²²»»á
-     * ÈÃÖ´ĞĞÖÍºóÒ»ÅÄ¡£·´¹ıÀ´·Åµ½×îÇ°Ãæ¾Í»á°ÑÖ´ĞĞÍùºóÍÆ¡£
-     *
-     * ²ÉÑùÖÜÆÚ = CCD_Div x TIM3 ÖÜÆÚ(10ms)£¬ÓëÖĞ¶ÏÓÅÏÈ¼¶ÎŞ¹Ø¡£
-     *   Ö÷Ñ­»·Àï OLED_Update() ÒªÔ¼ 20~24ms£¬Ö»Òª²»¹ØÖĞ¶Ï¾Í²»Ó°Ïì²ÉÑù¡£
-     *   Ò»Ö¡ÕæµÄÖ»ÓĞ ~0.6ms(TIME_us=2 -> CLK Ô¼ 110kHz)£¬Ö»Õ¼ 10ms µÄ 6%¡£
-     *
-     * CCD_AutoExposure() Ò²ÔÚÀïÃæÅÜ¡£TIM3 ÓÅÏÈ¼¶ÊÇ 0£¬»áÇÀÕ¼ SysTick(ÓÅÏÈ¼¶ 15)£¬
-     * ËùÒÔ HAL_Delay() ²»ÄÜÔÚÑ­»·ÀïÓÃ£»²ÉÑù´°¿ÚºÜĞ¡£¬±ğÔÚÀïÃæ¼Ó³¤ÑÓÊ±»ò´®¿Ú´òÓ¡¡£ */
-    if (++CCD_count >= CCD_Div)
-    {
-        CCD_count = 0;
-        get_CCD();          /* = RD_TSL()£º128 ÏñËØ¶ÁÊı + ×Ô¶¯ÆØ¹â + ãĞÖµ + ÖĞÏß */
+/* ---- CCD ¶Î£º²ÉÒ»Ö¡ + Ñ­¼£/Ö±½Ç/T ×´Ì¬»ú£¨TIM3 »Øµ÷·ÖÆµµ÷ÓÃ£¬·ÅÃ¿ÅÄÄ©Î²£©----
+ * Î»ÖÃºÜ¹Ø¼ü£ºËüÅÅÔÚ 10ms/50ms ¶ÎÖ®ºó£¬PWM ÒÑ¾­Ğ´½øµç»ú£¬
+ * ÔÙ»¨ ~0.7ms ²ÉÒ»Ö¡Ò²²»»áÈÃÖ´ĞĞÖÍºóÒ»ÅÄ¡£·´¹ıÀ´·Å×îÇ°Ãæ¾Í»á°ÑÖ´ĞĞÍùºóÍÆ¡£
+ *
+ * ²ÉÑùÖÜÆÚ = CCD_Div x TIM3 ÖÜÆÚ(10ms)£¬ÓëÖĞ¶ÏÓÅÏÈ¼¶ÎŞ¹Ø¡£
+ *   Ö÷Ñ­»·Àï OLED_Update() ÒªÔ¼ 20~24ms£¬Ö»Òª²»¹ØÖĞ¶Ï¾Í²»Ó°Ïì²ÉÑù¡£
+ *   Ò»Ö¡ÕæµÄÖ»ÓĞ ~0.6ms(TIME_us=2 -> CLK Ô¼ 110kHz)£¬Ö»Õ¼ 10ms µÄ 6%¡£
+ *   CCD_AutoExposure() Ò²ÔÚÀïÃæÅÜ¡£TIM3 ÓÅÏÈ¼¶ÊÇ 0£¬»áÇÀÕ¼ SysTick(ÓÅÏÈ¼¶ 15)£¬
+ *   ËùÒÔ HAL_Delay() ²»ÄÜÔÚÑ­»·ÀïÓÃ£»²ÉÑù´°¿ÚºÜĞ¡£¬±ğÔÚÀïÃæ¼Ó³¤ÑÓÊ±»ò´®¿Ú´òÓ¡¡£ */
+static void Ccd_Frame(void)
+{
+    get_CCD();          /* = RD_TSL()£º128 ÏñËØ¶ÁÊı + ×Ô¶¯ÆØ¹â + ãĞÖµ + ÖĞÏß */
 
         /* ---------- Ñ­¼££ºÖĞÏßÆ«²î -> ×ªÏòÄ¿±ê ----------
          * Ã¿Ò»Ö¡¶¼ÖØĞÂÅĞÒ»´Î(È¡×îĞÂÒ»Ö¡)£¬ÒòÎªÑ­¼£¡¢Ö±½ÇÓÃµÄÊÇÍ¬Ò»¸ö"ÖĞÏß"¡£
@@ -915,8 +955,20 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
                 if (ccd_adc[kk] < CCD_Yuzhi) darkCnt++;
 
             /* ´æÔÚĞÔÅĞ¾İ£º»­ÃæÀïµ½µ×ÓĞÃ»ÓĞºÚ¡£Ç°½ø/Í£³µÖ»¿´Õâ¸ö£¬
-             * ¾ÀÆ«²Å¿´ CCD_Lost ¡ª¡ª Á½¼şÊÂÒÔÇ°»ìÓÃÒ»¸ö±êÖ¾£¬²Åµ¼ÖÂ×ß×ßÍ£Í£¡£ */
-            TrackLineSeen = (darkCnt >= TRACK_SEEN_MIN) ? 1u : 0u;
+             * ¾ÀÆ«²Å¿´ CCD_Lost ¡ª¡ª Á½¼şÊÂÒÔÇ°»ìÓÃÒ»¸ö±êÖ¾£¬²Åµ¼ÖÂ×ß×ßÍ£Í£¡£
+             * ´ø³ÙÖÍ£ºÁ¬Ğø TRACK_UNSEEN_MAX Ö¡Ã»Ïß²ÅÅĞ"¶ªÏß"£¬»Ö¸´ÔòÊÇ 1 Ö¡Á¢¼´¡£
+             * µ¥Ö¡ºÚµãÊı¶¶µ½ 4 ÒÔÏÂ(·´¹â/ãĞÖµ¶¶¶¯)²»ÔÙÁ¢¿Ì²ÈÉ²³µ ¡ª¡ª
+             * ÄÇÒ»½ÅÉ²³µ»á°ÑËÙ¶È»·»ı·Ö¹à·´£¬³µ¾ÍµÃÏÈµ¹¸É¾»ÔÙÄÜ×ß¡£ */
+            if (darkCnt >= TRACK_SEEN_MIN)
+            {
+                TrackLineSeen  = 1u;
+                TrackUnseenCnt = 0;
+            }
+            else
+            {
+                if (TrackUnseenCnt < 255) TrackUnseenCnt++;
+                if (TrackUnseenCnt >= TRACK_UNSEEN_MAX) TrackLineSeen = 0u;
+            }
 
             /* ---------- T ×ÖÂ·¿Ú£ºÏÈÀÛ»ıÖ¤¾İ£¬ÉÔºóÔÙ·ÖÅÉ ----------
              * ºÍÆÕÍ¨Ö±½ÇµÄ¼¸ºÎÇø±ğ±¾ÉíÊÇ»¥³âµÄ£º
@@ -925,8 +977,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
              * µ«"ÂÔÍáµÄ T"ÔÚºáÏß»¹Ã»ÆÌÂúÊÓ³¡µÄÄÇ¼¸Ö¡£¬»á³¤µÃ¼«ÏñÖ±½Ç(Ò»²àÏÈºÚ+ºÚÇø±ä¿í)£¬
              * »á±»ÏÂÃæµÄ CORNER_CONFIRM ÇÀÅÜ£¬ËùÒÔÕâÀïÏÈÔÜ³ö T Ö¤¾İ£¬ÓÃ tIsT È¥ÒÖÖÆÍ¬Ö¡µÄ
              * Ö±½Ç´¥·¢¡£ÒÖÖÆÂäÔÚÁ´ÄÚ²¿µÄ´¥·¢Ìõ¼şÉÏ£¬²»¸ÄÁ´Ê× ¡ª¡ª ¸ÄÁ´Ê×»áÈÃÃüÖĞÄÇÖ¡µô½ø
-             * Á´Î²µÄ CORNER_SETTLE ·ÖÖ§£¬ÄÇÊÇ¿¿ÇÉºÏ¶ø²»ÊÇ¿¿Âß¼­¡£
-             * Ö»ÔÚ CORNER_LINE Ì¬ÀÛ»ı£ºPIVOT/SETTLE ÆÚ¼äÕû·ù·¢ºÚÊÇÕı³£ÏÖÏó£¬
+             * Á´Î²µÄ PIVOT ·ÖÖ§£¬ÄÇÊÇ¿¿ÇÉºÏ¶ø²»ÊÇ¿¿Âß¼­¡£
+             * Ö»ÔÚ CORNER_LINE Ì¬ÀÛ»ı£ºPIVOT ÆÚ¼äÕû·ù·¢ºÚÊÇÕı³£ÏÖÏó£¬
              * ²»ÉèÕâµÀÃÅµÄ»°×ªÍêÒ»¸öÍä»ØÀ´»á±»Ë²¼äÔÙÅĞÒ»´Î T¡£ */
             if (CornerState == CORNER_LINE)
             {
@@ -977,6 +1029,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
                     YawTurned      = 0.0f;
                     YawPrev        = Yaw;       /* ¼ÇÏÂµ±Ç° Yaw ×÷ÎªÔöÁ¿Æğµã */
                     PivotTicks     = 0;
+                    PivotOk        = 0;         /* ĞÂÒ»ÂÖ×ªÍä£¬×¥ÏßÈ·ÈÏ¼ÆÊı´ÓÍ·À´ */
                     TrackLostCnt   = 0;
                     CornerSeen     = 0;
                     TurnTargetCmd  = TRACK_DIR * (float)CornerDir * PIVOT_RATE;
@@ -994,85 +1047,130 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
                     int16_t err = (int16_t)CCD_Zhongzhi - TRACK_CENTER;  /* Æ«²î = ÖĞÏß - TRACK_CENTER */
                     if (err > -TRACK_DEAD && err < TRACK_DEAD) err = 0;  /* ¡ÀTRACK_DEAD ÄÚ¹éÁã */
-                    TurnTargetCmd  = TRACK_DIR * TRACK_GAIN * (float)err / 63.0f;
+
+                    /* ---------- ³¬Ç°×ªÏò(PD ÀïµÄ D)£ºÈÃ×ªÏò"¸üÌáÇ°" ----------
+                     * dErr = ±¾Ö¡Æ«²î - ÉÏÒ»Ö¡Æ«²î(¶¼È¥¹ıËÀÇø£¬¾²Ö¹ÔÚËÀÇøÄÚÊ± dErr ºã 0)¡£
+                     *   ÈëÍä£ºÆ«²î¸Õ¿ªÊ¼ÕÇ£¬dErr Óë err Í¬ºÅ -> ÌáÇ°¼Ó×ª£¬²»µÈÆ«²îÀ­´ó²Å¶¯ÊÖ£»
+                     *   »ØÕı£ºÆ«²î»¹ÔÚµ«¿ªÊ¼»ØÊÕ£¬dErr ·´ºÅ -> ÌáÇ°ÊÕ×ª£¬Ñ¹µô¹ı³å°ÚÕñ¡£
+                     * µÈĞ§ÓÚ°ÑÏìÓ¦ÌáÇ° TRACK_KD Ö¡(1 Ö¡ = CCD_Div x 10ms = 20ms)¡£
+                     * ÖĞÏßÓĞ ¡À1~3 ÏñËØÁ¿»¯¶¶¶¯£¬dErr »á±»¹à½ø ¡À3 ÏñËØÔëÉù£¬
+                     * ËùÒÔÏÈ³Ë TRACK_KD ÔÙÓÃ TRACK_LEAD_MAX Ó²ÏŞ·ù£¬
+                     * ³¬Ç°Á¿µÄÉÏÏŞÒ²¾Í 12 ÏñËØ(x TRACK_GAIN/63 Ô¼ 0.23 ×ª/Ãë)£¬·­²»ÁË³µ¡£
+                     * Ì«ÁéÃô¾Í°Ñ TRACK_KD ½µµ½ 1£¬»¹²»¹»ÌáÇ°¾ÍÉıµ½ 3¡£ */
+                    int16_t dErr = err - TrackErrPrev;
+                    TrackErrPrev = err;
+                    int16_t lead = TRACK_KD * dErr;
+                    if      (lead >  TRACK_LEAD_MAX) lead =  TRACK_LEAD_MAX;
+                    else if (lead < -TRACK_LEAD_MAX) lead = -TRACK_LEAD_MAX;
+
+                    TurnTargetCmd  = TRACK_DIR * TRACK_GAIN * (float)(err + lead) / 63.0f;
                 }
             }
             else if (CornerState == CORNER_PIVOT)
             {
-                /* ×ªÍäÊ± CCD ²»ÓÃ¹Ü£¬×ªÏòÄ¿±ê¹Ì¶¨£º
+                /* ×ªÍäÊ±×ªÏòÄ¿±ê¹Ì¶¨£º
                  * Ã¿Ö¡¶¼Ğ´Ò»´Î¶ø²»ÊÇÖ»ÔÚ¿ªÊ¼Ê±Ğ´Ò»´Î£¬50ms ¶ÎÃ¿ÅÄ¶¼ÒªÓÃ Target£¬
                  * ¶øÇÒ TURN_FF Ç°À¡ÒªÒ»Ö±¸ú×Å£¬ÖĞÍ¾¸Ä³É 0 »á¶ªÇ°À¡¡¢×ª²»¶¯ */
                 TurnTargetCmd  = ((int32_t)PivotTicks >= (int32_t)PIVOT_ADVANCE_MS)
                                ? (TRACK_DIR * (float)CornerDir * PIVOT_RATE)
                                : 0.0f;      /* Ç°À¡¶ÎÄÚ£ºÏÈÖ±ĞĞ²»¶¯£¬µÈ³µÍ·Ô½¹ıÖ±½ÇÔÙ×ª */
                 TrackLostCnt   = 0;         /* ×ªÍä²»²ÎÓë"¶ªÏß"¼ÆÊı£¬·ñÔò»á°ÑÖ±½ÇÎóÅĞ³É¶ªÏß */
-            }
-            else /* CORNER_SETTLE */
-            {
-                /* ×ªÍêÁË£ºÏÈÖ±ĞĞ×ß³öÖ±½ÇÇø£¬ÔÙ¿´ CCD ÉÏÓĞÃ»ÓĞÏß¡£
-                 * ÕÒµ½Ïß¾ÍÁ¢¿Ì»Ø CORNER_LINE£¬·ñÔò×ªÍê 90 ¶È»á¿¨ÔÚÖ±½ÇµãÉÏ£¬
-                 * ±»Ñ­¼£»·µ±³É"Æ«²îºÜ´ó"ÍùÒ»¸ö·½Ïò´òËÀ¡£
-                 * ³¬¹ı SETTLE_TIMEOUT_MS »¹Ã»ÕÒµ½¾ÍÇ¿ÖÆ»Ø CORNER_LINE£¬
-                 * ¿¿Ñ­¼£×Ô¼º¾À»ØÀ´¡£ */
-                TurnTargetCmd  = 0.0f;
-                TrackLostCnt   = 0;
 
-                if (!CCD_Lost)
+                /* ---------- CCD ½Ó¹Ü£º×ªµ½ÖØĞÂ×¥µ½ÏßÎªÖ¹ ----------
+                 * Ô½¹ı PIVOT_MIN_DEG Ö®ºó£¬Á¬Ğø PIVOT_LINE_FRAMES Ö¡ÄÃµ½ºÏ·¨Ï¸Ïß
+                 * (!CCD_Lost£ºÑØÅä¶Ô + Ïß¿í + ¶Ô±È¶È¶¼¹ı)¾ÍÁ¢¿Ì»ØÑ­¼£¡£
+                 * Í£×ª½ÇÓÉ"¿´µ½ĞÂÏß"¾ö¶¨£¬²»ÔÙÓ²Ëã 85 ¶È ¡ª¡ª Íä»ºÍä¼±¶¼ÄÜÌù×¡¡£
+                 * ÃÅ¼÷Ö®Ç°¾ÉÏß/ºÚÇø»¹ÔÚ»­ÃæÀï£¬CCD_Lost ±¾À´¾ÍÊÇ 0£¬²»ÄÜĞÅ¡£ */
+                if (fabsf(YawTurned) >= PIVOT_MIN_DEG && !CCD_Lost)
                 {
-                    if (SettleOk < 255) SettleOk++;
-                    if (SettleOk >= SETTLE_OK_FRAMES)
+                    if (PivotOk < 255) PivotOk++;
+                    if (PivotOk >= PIVOT_LINE_FRAMES)
                     {
-                        CornerState = CORNER_LINE;   /* ÕÒµ½ÏßÁË£¬»ØÕı³£Ñ­¼£ */
+                        CornerState = CORNER_LINE;   /* ×¥µ½ĞÂÏß£ºÁ¢¿Ì»ØÑ­¼£½Ó¹Ü */
                         CornerSeen  = 0;
+                        PivotOk     = 0;
                     }
                 }
                 else
                 {
-                    SettleOk = 0;
-                }
-
-                if (SettleTicks >= SETTLE_TIMEOUT_MS)   /* µÈÌ«¾ÃÁË£¬Ç¿ÖÆ»ØÑ­¼£ */
-                {
-                    CornerState = CORNER_LINE;
-                    SettleOk    = 0;
+                    PivotOk = 0;
                 }
             }
 
             /* ---------- T ·ÖÅÉ£ºÅÅÔÚÕûÌõ×´Ì¬»úÁ´Ö®ºó ----------
              * ÉÏÃæµÄÖ±½Ç´¥·¢ÒÑ¾­±» !tIsT µ²µôÁË£¬µ«Í¬Ö¡ËüÈÔ¿ÉÄÜ×ß"¶ªÏß¼ÆÊı"»ò
              * "°´»µÖĞÏß¾ÀÆ«"ÕâÁ½Ìõ·ÖÖ§²¢Ğ´ TurnTargetCmd¡£·ÖÅÉ·ÅÁ´Î²£¬ÓÉÕâÀï¸²¸Ç
-             * ³É T ×Ô¼ºµÄ¶¯×÷£¬Ë³ĞòÉÏ¾ÍÓĞ×îÖÕ»°ÓïÈ¨£¬²»ÓÃÔÙÈ¥¸ÄÁ´Ê×µÄÅĞ¶¨Ìõ¼ş¡£ */
+             * ³É T ×Ô¼ºµÄ¶¯×÷£¬Ë³ĞòÉÏ¾ÍÓĞ×îÖÕ»°ÓïÈ¨£¬²»ÓÃÔÙÈ¥¸ÄÁ´Ê×µÄÅĞ¶¨Ìõ¼ş¡£
+             * ĞĞÎª£ºÃ¿¸öÈ·ÈÏµÄ T ¶¼¹Ì¶¨×ó×ª(CornerDir=-1)£¬×ªµ½ CCD ×¥µ½ĞÂÏßÎªÖ¹£¬
+             * Ã»ÓĞ"µÚ¶ş¸ö T Í£³µ"¡£
+             * ·½ÏòĞ´ËÀ -1(×ó×ª)£ºÖ±½ÇµÄ·½ÏòÊÇ¿¿"ÄÄ¶Ë·¢ºÚ"ÍÆ³öÀ´µÄ£¬
+             * T ÊÇÕû·ùºÚ¡¢ÍÆ²»³öÀ´£»CornerDir=-1 Åä TRACK_DIR=-1 -> Target=+PIVOT_RATE£¬
+             * Óë"Target>0 = ×ó×ª"µÄÔ¼¶¨Ò»ÖÂ¡£ */
             if (tIsT)
             {
                 TSeen        = 0;
                 CornerSeen   = 0;
                 TrackLostCnt = 0;
-                TCount++;
 
-                if (TCount == 1)
-                {
-                    /* µÚÒ»¸ö T£º×ó×ª 85 ¶È(PIVOT_DEG ÏÖÔÚ¾ÍÊÇ 85£¬²»ÔÙµ¥¿ª±äÁ¿)¡£
-                     * ·½Ïò±ØĞëĞ´ËÀ£ºÖ±½ÇµÄ·½ÏòÊÇ¿¿"ÄÄ¶Ë·¢ºÚ"ÍÆ³öÀ´µÄ£¬
-                     * T ÊÇÕû·ùºÚ¡¢ÍÆ²»³öÀ´£¬ËùÒÔÕâÀïÖ±½Ó¸ø -1 = ×ó×ª¡£ */
-                    CornerDir      = -1;
-                    CornerState    = CORNER_PIVOT;
-                    YawTurned      = 0.0f;
-                    YawPrev        = Yaw;
-                    PivotTicks     = 0;
-                    TurnTargetCmd  = TRACK_DIR * (float)CornerDir * PIVOT_RATE;
-                }
-                else
-                {
-                    /* µÚ¶ş¸ö T£ºÍË³öÑ­¼££¬Ô­µØÖ±Á¢¡£
-                     * SpeedTargetCmd ±ØĞëÏÔÊ½ÖÃ 0 ¡ª¡ª Ğ±ÆÂËäÈ»ÎŞÌõ¼şÅÜ£¬µ«Ñ­¼£ÄÇÌõ
-                     * ÃüÁî¸³ÖµÖ»ÔÚ TrackMode Ê±Ö´ĞĞ£¬Ò»¹ØÑ­¼£Ëü¾Í¶³½áÔÚÉÏ´ÎµÄ 0.5£¬
-                     * ³µ»áÕÕ¾ÉÖ±ĞĞ¶ø²»ÊÇ¼õËÙÕ¾×¡¡£ */
-                    TrackMode      = 0;
-                    SpeedTargetCmd = 0.0f;
-                    TurnTargetCmd  = 0.0f;
-                }
+                CornerDir      = -1;
+                CornerState    = CORNER_PIVOT;
+                YawTurned      = 0.0f;
+                YawPrev        = Yaw;       /* ÓëÖ±½Ç´¥·¢Í¬¿î£ºÒÔµ±Ç° Yaw ÎªÔöÁ¿Æğµã */
+                PivotTicks     = 0;
+                PivotOk        = 0;         /* Í¬ÉÏ£ºĞÂÒ»ÂÖ×ªÍä£¬×¥ÏßÈ·ÈÏ¼ÆÊı´ÓÍ·À´ */
+                TurnTargetCmd  = TRACK_DIR * (float)CornerDir * PIVOT_RATE;
             }
         }
+}
+
+/* ==========================================================================
+ * TIM3 ÖĞ¶Ï£ºÕû¸öÏµÍ³Î¨Ò»µÄÊ±¼ä»ù×¼£¨10ms£©£¬ÏÖÔÚÖ»×ö·ÖÆµ·Ö·¢
+ *   tim.c: Prescaler = 72-1, Period = 10000-1  ->  72MHz/72/10000 = 10ms
+ *
+ *   Ã¿ 1 ÅÄ    hcount++ / Count1++£¨·ÖÆµ¼ÆÊı£©
+ *   Ã¿ 10ms    Tick10_Attitude()   ×ËÌ¬ -> Ö±Á¢/ÆğÁ¢»· -> PWM
+ *   Ã¿ 50ms    Tick50_SpeedTurn()  ²âËÙ -> ËÙ¶È»· + ×ªÏò»·
+ *   Ã¿ÅÄ       Ë¤³µ¼ì²â£¨|Angle| ³¬ÏŞ -> StopCar£©
+ *   Ã¿ÅÄÄ©     Ccd_Frame()         ²ÉÒ»Ö¡ CCD -> Ñ­¼£×´Ì¬»ú
+ *
+ * Ë¤³µ¼ì²âÃ¿ÅÄ¶¼ÅĞ£¬µ« Angle ÊÇ 10ms ²Å¸üĞÂÒ»´Î£¬Êµ¼ÊÏìÓ¦Ô¼ 10ms¡£
+ * StopCar() ÄÚ²¿»áµ÷ PID_ResetAll()£¬ÏÂ´ÎÊÕµ½ "1" Ê± StartErect()
+ * »áÏÈ×ö Angle_Realign() ÖØĞÂ¶Ô×¼½Ç¶È¡£
+ * ========================================================================== */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim != &htim3)
+    {
+        return;
+    }
+
+    hcount++;
+    __HAL_TIM_CLEAR_IT(&htim3, TIM_IT_UPDATE);
+
+    if (hcount >= TICK_10MS)                          /* ===== 10ms ¶Î ===== */
+    {
+        hcount = 0;
+        Tick10_Attitude();
+    }
+
+    Count1++;                                         /* ===== 50ms ¶Î ===== */
+    if (Count1 >= TICK_50MS)
+    {
+        Count1 = 0;
+        Tick50_SpeedTurn();
+    }
+
+    /* Æ½ºâÖĞ¶Ï£º|Angle| ³¬¹ı ERECT_START_ANG -> StopCar() Í£³µ»Ø IDLE */
+    if (CarState == ST_BALANCE && fabsf(Angle) > ERECT_START_ANG)
+    {
+        StopCar();
+    }
+
+    /* CCD ·ÅÃ¿ÅÄÄ©Î²£ºPWM ÒÑĞ´Íê£¬²ÉÒ»Ö¡²»ÍÆ³ÙÖ´ĞĞ */
+    if (++CCD_count >= CCD_Div)
+    {
+        CCD_count = 0;
+        Ccd_Frame();
     }
 
     if (__HAL_TIM_GET_FLAG(&htim3, TIM_IT_UPDATE) != RESET)
@@ -1087,6 +1185,229 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         }
 
         TimerCount = __HAL_TIM_GET_COUNTER(&htim3);
+    }
+}
+
+/* ==========================================================================
+ * ===== ÒÔÏÂÈı¸öº¯ÊıÖ»±»Ö÷Ñ­»·µ÷ÓÃ£¨ÂıÂ·¾¶£¬ÈİÈÌ¼¸Ê®ºÁÃëÑÓ³Ù£©=====
+ * ========================================================================== */
+
+/* ---------- OLED ×´Ì¬ÆÁ£ºÕûÆÁÖØ»­Ò»±é + µç³ØµçÑ¹Ñ²¼ì ----------
+ * ²¼¾Ö 128x64£¬OLED_6X8 ×ÖÌåÃ¿×Ö 6 ÏñËØ¿í£º
+ *   y=0        D<Div> <ms>ms  M<Max> m<Min>         ²ÉÑù·ÖÆµ/ÖÜÆÚ/»Ò¶È·¶Î§
+ *   y=8        T<ãĞÖµ> Z<ÖĞÏß> <×ó>-<ÓÒ> L<¶ªÏß>     x=92: C<×´Ì¬> <×ª½Ç>
+ *   y=16..31   128 ÏñËØ»Ò¶È²¨ĞÎ£¨ºÚÏß±íÏÖÎªÏÂÏİ£©
+ *   y=32       T:<½Ç¶È»·Ä¿±ê>       x=60: Yaw:<Æ«º½½Ç>
+ *   y=40       Angle:<Çã½ÇÊµ²â>
+ *   y=48       O:<½Ç¶È»·Êä³ö>       x=64: B<µç³ØµçÑ¹>/!<¿÷µç>
+ *   y=56       TRK<!/-><×ªÏòÄ¿±ê>
+ *
+ * Ã¿ĞĞ×î¶à 21 ¸ö×Ö·û£¨128/6£©£¬×î³¤µÄÊÇ "T255 Z127 127-127 L1" = 20 ×Ö·û£¬
+ * ¸ÕºÃ²»Ô½½ç¡£¸Ä¸ñÊ½Ç°ÏÈÊı³¤¶È¡£
+ * OLED.c Ğ´»º³åÓÃµÄÊÇ |=£¬ËùÒÔÃ¿Ö¡±ØĞëÏÈ OLED_Clear()£¬·ñÔòÉÏÒ»Ö¡µÄ×Ö»áÖØÓ°¡£
+ * Ïë¿´ PID ²ÎÊıÊ±°ÑÏÂÃæ KP/KI/KD ÄÇ¼¸ĞĞ×¢ÊÍ·Å¿ª£¬
+ * Í¬Ê±°Ñ CCD µÄ y=0/y=8 Å²¿ª£¬±ğÈÃ y=8 ×²µ½ KP ÄÇÒ»ĞĞ¡£ */
+static void OLED_RenderStatus(void)
+{
+    uint8_t  k;
+    uint16_t den;   /* ·À³ıÁã£º±¾Ö¡×î´ó»Ò¶È¿ÉÄÜÎª 0 */
+    uint8_t  ty;
+
+    OLED_Clear();
+
+    OLED_Printf(0, 0, OLED_6X8, "D%u %ums M%u m%u",
+                (unsigned)CCD_Div, (unsigned)(CCD_Div * 10u),
+                (unsigned)CCD_Max, (unsigned)CCD_Min);
+
+    OLED_Printf(0, 8, OLED_6X8, "T%u Z%u %u-%u L%u",
+                (unsigned)CCD_Yuzhi, (unsigned)CCD_Zhongzhi,
+                (unsigned)CCD_Left,  (unsigned)CCD_Right, (unsigned)CCD_Lost);
+
+    /* Ö±½Ç×´Ì¬Óë×ª½Ç£ºC0=Ñ­¼£ÖĞ C1=×ªÍäÖĞ£¬ºóÃæÊÇÀÛ¼Æ×ª½Ç */
+    OLED_Printf(92, 8, OLED_6X8, "C%u%+03.0f",
+                (unsigned)CornerState, (double)YawTurned);
+
+    /* ===================== CCD ²¨ĞÎÏÔÊ¾ =====================
+     * »Ò¶ÈÖµ 0..CCD_Max ÏßĞÔÓ³Éäµ½ 0..15 ÏñËØ¸ß£¬»­³ÉÖù×´Í¼£º
+     * Ô½ºÚ(»Ò¶ÈÔ½µÍ)Öù×ÓÔ½¶Ì£¬ËùÒÔºÚÏßÔÚ»­ÃæÉÏ±íÏÖÎª"ÏÂÏİ"¡£
+     * ãĞÖµÏßµ¥¶ÀÓÃµãÏß»­³öÀ´£¨Ã¿ 4 ÏñËØÒ»¸öµã£©£¬·½±ã¿´ãĞÖµ¿¨ÔÚÄÄÀï¡£
+     *
+     * ccd_adc[] ÓÉ TIM3 ÖĞ¶ÏĞ´¡¢Ö÷Ñ­»·¶Á£¬¿ÉÄÜ¶Áµ½°ëÖ¡£¬
+     *   Îó²îÖ»ÓĞ 0.6ms/(CCD_Div x 10ms) Ô¼ 1.5%£¬Ö»Ó°Ïì×îºóÒ»ÁĞ£¬Ò»Ö¡¾Í»Ö¸´¡£
+     * 128 ¸ö OLED_DrawPoint Ô¼ 130us£¬Ïà¶Ô OLED_Update() µÄ ~23ms ¿ÉÒÔºöÂÔ¡£ */
+    den = CCD_Max ? CCD_Max : 1u;
+    for (k = 0; k < CCD_PIXELS; k++)
+    {
+        uint8_t h = (uint8_t)((uint32_t)ccd_adc[k] * 15u / den);
+        if (h > 15) h = 15;
+        OLED_DrawPoint(k, (int16_t)(31 - h));
+    }
+
+    /* ãĞÖµÏß£¨µãÏß£¬Ã¿ 4 ÏñËØÒ»¸öµã£©£º¶ÔÓ¦»Ò¶È¸ßµÍµÄ»ù×¼ */
+    ty = (uint8_t)(31 - ((uint32_t)CCD_Yuzhi * 15u / den));
+    if (ty > 31) ty = 31;
+    for (k = 0; k < CCD_PIXELS; k += 4) OLED_DrawPoint(k, (int16_t)ty);
+
+//        OLED_Printf(0, 0, OLED_6X8, "ST:%s %d", StateStr(), (int)ErectTime);   /* ×´Ì¬ + ÆğÁ¢¼ÆÊ±(ms) */
+//        OLED_Printf(0, 8, OLED_6X8, "KP:%05.2f//%05.2f//%05.2f ", AnglePID.Kp, SpeedPID.Kp, TurnPID.Kp);  // Èı¸ö»·µÄ Kp
+//        OLED_Printf(0, 16, OLED_6X8, "KI:%05.2f//%05.2f//%05.2f", AnglePID.Ki, SpeedPID.Ki, TurnPID.Ki);  // Èı¸ö»·µÄ Ki
+//        OLED_Printf(0, 24, OLED_6X8, "KD:%05.2f//%05.2f//%05.2f", AnglePID.Kd, SpeedPID.Kd, TurnPID.Kd);  // Èı¸ö»·µÄ Kd
+    OLED_Printf(0, 32, OLED_6X8, "T:%+05.1f", AnglePID.Target);	// ½Ç¶È»·Ä¿±êÖµ£¨Ò²¾ÍÊÇÄ¿±êÇã½Ç£©
+    OLED_Printf(60, 32, OLED_6X8, "Yaw:%+07.2f", Yaw);			// Æ«º½½Ç(¶È)£º×ó×ªÎªÕı
+    OLED_Printf(0, 40, OLED_6X8, "Angle:%+05.1f", Angle);			// Çã½ÇÊµ²âÖµ
+    OLED_Printf(0, 48, OLED_6X8, "O:%+05.0f", AnglePID.Out);	// ½Ç¶È»·Êä³ö
+//        OLED_Printf(0, 56, OLED_6X8, "GX%+05.1f", GX / GYRO_LSB_PER_DPS);  /* X ½ÇËÙ¶È(¡ã/s)£¬¾²Ö¹Ó¦Îª 0 */
+//        OLED_Printf(42, 56, OLED_6X8, "GZ%+05.1f", GZ / GYRO_LSB_PER_DPS);  /* Z ½ÇËÙ¶È(¡ã/s)£¬¾²Ö¹Ê±Ó¦½Ó½ü YAW_BIAS_DPS */
+//        OLED_Printf(70, 40, OLED_6X8, "G:%+02.2f", G);
+//        OLED_Printf(70, 48, OLED_6X8, "S:%+02.2f", RightSpeed);   /* ÓÒÂÖ×ªËÙ£ºÈÃÎ»¸øµç³ØµçÑ¹£¬Òª¿´¾Í·Å¿ª */
+//        OLED_Printf(84, 56, OLED_6X8, "S%+02.2f", LeftSpeed);     /* ×óÂÖ×ªËÙ£ºÍ¬ÉÏ */
+
+    /* µç³ØµçÑ¹£ºÃ¿ BAT_SAMPLE_MS ²ÉÒ»ÂÖ(8 ´ÎÆ½¾ù)£¬IIR Æ½»¬ºóÏÔÊ¾ÔÚÔ­ÓÒÂÖËÙÎ»ÖÃ¡£
+     * Ê×ÂÖÖ±½Ó²ÉÓÃÊµ²âÖµ£¬ÃâÈ¥´Ó 0 ÅÀµ½ÕæÊµµçÑ¹µÄÄÇÁ½ÈıÃë¡£ */
+    {
+        static uint32_t lastBatTick = 0;
+        uint32_t now = HAL_GetTick();
+        if ((uint32_t)(now - lastBatTick) >= BAT_SAMPLE_MS)
+        {
+            float v = Bat_ReadVoltage();
+            lastBatTick = now;
+            BatVoltage = (BatVoltage <= 0.1f) ? v : BatVoltage + 0.3f * (v - BatVoltage);
+        }
+        if (BatVoltage < BAT_LOW_V)
+            OLED_Printf(64, 48, OLED_6X8, "!%04.1fV", BatVoltage);   /* '!': µÍÓÚ¿÷µçÏß */
+        else
+            OLED_Printf(64, 48, OLED_6X8, "B%04.1fV", BatVoltage);
+    }
+    OLED_Printf(0, 56, OLED_6X8, "TRK%c%+05.2f", TrackMode ? '!' : '-', TurnPID.Target);/* ! = Ñ­¼£ÖĞ£¬- = ²»Ñ­¼£ */
+    OLED_Update();
+}
+
+/* ---------- Ñ­¼£¿ª¹ØÍ³Ò»Èë¿Ú£º¿ª/¹Ø¶¼ÏÈ°Ñ×´Ì¬Çå¸É¾» ----------
+ * Èı´¦ÇĞ»»µã(°´¼üµÚ¢Ú»÷¡¢Âã×Ö½Ú 'T'/'t'¡¢°ü [t])¹²ÓÃÕâÒ»·İ£º
+ *   TrackLostCnt ¶ªÏß¼ÆÊı¡¢TurnTargetCmd ×ªÏòÃüÁî¡¢Ö±½Ç/T Ö¤¾İÓë×´Ì¬»ú¡¢
+ *   PivotOk ×¥ÏßÈ·ÈÏ¼ÆÊı¡£²»ÇåµÄ»°»á´ø×ÅÉÏÒ»ÂÖµÄÖ¸ÁîºÍ PIVOT ×´Ì¬
+ * Ë²¼äÇÀÒ»ÏÂ£¨¸Õ¿ªÑ­¼£¾Í×ªÒ»¸ö 90 ¶ÈÖ®Àà£©¡£ */
+static void Track_Reset(uint8_t on)
+{
+    TrackMode     = on;
+    TrackLostCnt  = 0;
+    TurnTargetCmd = 0.0f;
+    CornerState   = CORNER_LINE;
+    CornerSeen    = 0;
+    TSeen         = 0;
+    PivotOk       = 0;
+}
+
+/* ---------- À¶ÑÀ [°ü] ´¦Àí£ºÂÖÑ¯Á½¸ö½ÓÊÕ»º³å²¢·ÖÅÉ ----------
+ * °ü¸ñÊ½ÓëÂã×Ö½ÚÃüÁîµÄ¶ÔÕÕ¡¢´óĞ¡Ğ´ÏİÚå¼ûÖ÷Ñ­»·ÀïÄÇ¶Î×Ü×¢ÊÍ¡£
+ * strtok »á¸ÄĞ´»º³åÄÚÈİ£¬Ö»ÄÜÔÚÖ÷Ñ­»·Àï×ö£¨ÖĞ¶ÏÊÕÍêÁË²ÅÂÖµ½Ëü£©¡£ */
+static void Blue_ProcessPackets(void)
+{
+    uint8_t i;
+
+    for (i = 0; i < 2; i++)
+    {
+        if (BlueSerial_RxFlag[i] == 1)
+        {
+            char *Tag = strtok(BlueSerial_RxPacket[i], ",");	// È¡µÚ 1 ¶Î£¬×÷Îª±êÇ© Tag
+
+            if (Tag != NULL)
+            {
+                if (strcmp(Tag, "1") == 0)                  /* ÊÕµ½ [1] -> ÆğÁ¢ */
+                {
+                    StartErect();
+                }
+                else if (strcmp(Tag, "0") == 0)             /* ÊÕµ½ [0] -> ¼±Í£ */
+                {
+                    StopCar();
+                }
+                else if (strcmp(Tag, "t") == 0)             /* ÊÕµ½ [t] -> ÇĞ»»Ñ­¼££¨Ö»ÈÏĞ¡Ğ´£»´óĞ´ T Çë·¢Âã×Ö½Ú£© */
+                {
+                    Track_Reset(!TrackMode);
+                }
+                else if (strcmp(Tag, "key") == 0)           /* [key,Ãû³Æ,¶¯×÷]£º°´¼üÊÂ¼şÖ¡ */
+                {
+                    char *Name = strtok(NULL, ",");			// È¡µÚ 2 ¶Î£¬×÷Îª°´¼üÃû³Æ
+                    char *Action = strtok(NULL, ",");		// È¡µÚ 3 ¶Î£¬×÷Îª°´¼ü¶¯×÷
+
+                    /* ÕâÀïÖ´ĞĞ°´¼ü¶ÔÓ¦µÄ¶¯×÷£¬Ä¿Ç°Ã»ÓĞĞèÒª´¦ÀíµÄ */
+                }
+                else if (strcmp(Tag, "slider") == 0)	// [slider,Ãû³Æ,Öµ]£º»¬¿éÖ¡£¬ÓÃÀ´ÔÚÏß¸Ä²ÎÊı
+                {
+                    char *Name = strtok(NULL, ",");			// È¡µÚ 2 ¶Î£¬×÷Îª²ÎÊıÃû
+                    char *Value = strtok(NULL, ",");		// È¡µÚ 3 ¶Î£¬×÷Îª²ÎÊıÖµ
+
+                    /* Ö´ĞĞ»¬¿é¶ÔÓ¦µÄ¶¯×÷£¬°ÑĞÂÖµĞ´µ½¶ÔÓ¦µÄ PID ²ÎÊı */
+                    if (strcmp(Name, "AngleKp") == 0)	// ²ÎÊıÃûÎª AngleKp
+                    {
+                        AnglePID.Kp = atof(Value);		// Ğ´Èë½Ç¶È»· Kp
+                    }
+                    else if (strcmp(Name, "AngleKi") == 0)	// ²ÎÊıÃûÎª AngleKi
+                    {
+                        AnglePID.Ki = atof(Value);		// Ğ´Èë½Ç¶È»· Ki
+                    }
+                    else if (strcmp(Name, "AngleKd") == 0)	// ²ÎÊıÃûÎª AngleKd
+                    {
+                        AnglePID.Kd = atof(Value);		// Ğ´Èë½Ç¶È»· Kd
+                    }
+                    else if (strcmp(Name, "G") == 0)	// ²ÎÊıÃûÎª G£¨½Ç¶È¼Æ°²×°Æ«ÖÃ£©
+                    {
+                        G = atof(Value);		// Ğ´Èë°²×°Æ«ÖÃ
+                    }
+                    else if (strcmp(Name, "SpeedKp") == 0)		// ²ÎÊıÃûÎª SpeedKp
+                    {
+                        SpeedPID.Kp = atof(Value);				// Ğ´ÈëËÙ¶È»· Kp
+                    }
+                    else if (strcmp(Name, "SpeedKi") == 0)		// ²ÎÊıÃûÎª SpeedKi
+                    {
+                        SpeedPID.Ki = atof(Value);				// Ğ´ÈëËÙ¶È»· Ki
+                    }
+                    else if (strcmp(Name, "SpeedKd") == 0)		// ²ÎÊıÃûÎª SpeedKd
+                    {
+                        SpeedPID.Kd = atof(Value);				// Ğ´ÈëËÙ¶È»· Kd
+                    }
+                    else if (strcmp(Name, "TurnKp") == 0)		// ²ÎÊıÃûÎª TurnKp
+                    {
+                        TurnPID.Kp = atof(Value);				// Ğ´Èë×ªÏò»· Kp
+                    }
+                    else if (strcmp(Name, "TurnKi") == 0)		// ²ÎÊıÃûÎª TurnKi
+                    {
+                        TurnPID.Ki = atof(Value);				// Ğ´Èë×ªÏò»· Ki
+                    }
+                    else if (strcmp(Name, "TurnKd") == 0)		// ²ÎÊıÃûÎª TurnKd
+                    {
+                        TurnPID.Kd = atof(Value);				// Ğ´Èë×ªÏò»· Kd
+                    }
+
+                }
+                else if (strcmp(Tag, "joystick") == 0)		// [joystick,LH,LV,RH,RV]£ºÒ¡¸ËÖ¡
+                {
+                    int8_t LH = atoi(strtok(NULL, ","));		// È¡µÚ 2 ¶Î£¬×÷ÎªÒ¡¸ËÖµ LH
+                    int8_t LV = atoi(strtok(NULL, ","));		// È¡µÚ 3 ¶Î£¬×÷ÎªÒ¡¸ËÖµ LV
+                    int8_t RH = atoi(strtok(NULL, ","));		// È¡µÚ 4 ¶Î£¬×÷ÎªÒ¡¸ËÖµ RH
+                    int8_t RV = atoi(strtok(NULL, ","));		// È¡µÚ 5 ¶Î£¬×÷ÎªÒ¡¸ËÖµ RV
+
+                    /* Ö´ĞĞÒ¡¸Ë¶¯×÷ */
+                    /* Ò¡¸ËËÀÇø£º°´ ¡À5 ¶¶¶¯Æ¯ÒÆ */
+                    if (LV > -5 && LV < 5) { LV = 0; }
+                    if (!TrackMode) SpeedPID.Target = LV / 50.0;   /* Ñ­¼£Ê±Ç°½øËÙ¶ÈÓÉ TRACK_SPEED ¸ø£¬50ms ¶Î»á¸²¸Ç */
+
+                    /* Ñ­¼£Ä£Ê½ÏÂÒ¡¸ËµÄ×ªÏò±»ÆÁ±Î£º
+                     *   Ñ­¼£×Ô¼ºĞ´ TurnPID.Target À´¾ÀÆ«£¬Ò¡¸ËÔÙĞ´Ò»´Î»á´ò¼Ü£»
+                     *   Á½Õß¹²ÓÃÍ¬Ò»¸ö±äÁ¿£¬ËùÒÔÖ»ÔÚ·ÇÑ­¼£Ê±½ÓÊÜ RH */
+                    if (!TrackMode)
+                    {
+                        if (RH > -5 && RH < 5) { RH = 0; }
+                        TurnTargetCmd = RH / 60.0;   // RH>0 = ÓÒ×ª£»/60 ±ÈÔ­ /50 ÉÔÈí£¬ÅäºÏĞ±ÆÂ¼õÉÙ´ò»¬
+                        if (TurnTargetCmd != 0.0f && LV == 0)
+                            SpeedPID.Target = 0.20f;  /* Ö»×ªÏò²»Ç°½øÊ±¸øÒ»µãÇ°½øËÙ¶È£¬±ÜÃâÔ­µØ´ò×ª */
+                    }
+
+                }
+            }
+
+            BlueSerial_RxFlag[i] = 0;				// ´¦ÀíÍêÇå³ı±êÖ¾Î»£¬µÈ´ıÏÂÒ»´Î
+        }
     }
 }
 
@@ -1128,6 +1449,14 @@ int main(void)
   MX_USART3_UART_Init();
   MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
+    /* PA7 -> ADC1_IN7 Ä£ÄâÊäÈë£ºµç³Ø 10k/2.7k ·ÖÑ¹¼ì²â(¼û Bat_ReadVoltage ÉÏ·½×¢ÊÍ) */
+    {
+        GPIO_InitTypeDef gpioBat = {0};
+        gpioBat.Pin = GPIO_PIN_7;
+        gpioBat.Mode = GPIO_MODE_ANALOG;
+        HAL_GPIO_Init(GPIOA, &gpioBat);
+    }
+
     HAL_Delay(200);   // ¸ø OLED ÉÏµçÁôµãÊ±¼ä£¬·ñÔòÊ×Ö¡ÏÔÊ¾Òì³£
     OLED_Init();
     OLED_Clear();
@@ -1143,9 +1472,8 @@ int main(void)
                           * ²»È»µÚÒ»¸öÊ±ÖÓµÄÇ°¼¸¸öÏñËØ»á±»ÉÏ´ÎµÄ²ĞÁôµçÆ½´øÆ«¡£ */
     BlueSerial_Init();   // ³õÊ¼»¯À¶ÑÀ½ÓÊÕ£¨USART3 + ½ÓÊÕÖĞ¶Ï£©
     HAL_TIM_Base_Start(&htim3);
-    uint8_t ID;
-    ID = MPU6050_GetID();   /* ¶Á WHO_AM_I£º0x68 ËµÃ÷ MPU6050 ÔÚÏß£¬·ñÔò¶à°ëÊÇ½ÓÏßÎÊÌâ£¨µ±Ç°Î´Ê¹ÓÃ£©£»
-                             * ĞèÒªÊ±°ÑËüÏÔÊ¾µ½ OLED ÉÏ£¬¾ÍÄÜÈ·ÈÏ´«¸ĞÆ÷ÊÇ·ñÓ¦´ğ¡£ */
+    (void)MPU6050_GetID();  /* ¶Á WHO_AM_I(0x68=ÔÚÏß)£ºÉÏµçË³ÊÖÌ½Ò»´Î I2C Ó¦´ğ£¬
+                             * ·µ»ØÖµÔİ²»ÓÃ£»ĞèÒªÈ·ÈÏ´«¸ĞÆ÷Ê±°ÑËüÏÔÊ¾µ½ OLED ¼´¿É¡£ */
     OLED_Update();
     MX_TIM3_Init();                  /* ÖØ¸´³õÊ¼»¯Ò»´Î TIM3 µÄ¼ÆÊıÆ÷£¬Óë MX_TIM3_Init() Í¬²½£¬
                                       * È·±£¿ªÖĞ¶ÏÖ®Ç°µÄ¼ÆÊıÊÇ¸É¾»µÄ¡£ */
@@ -1168,8 +1496,6 @@ int main(void)
     while (1)
     {
         int len;
-        uint8_t i;
-        static uint32_t lastSendTime = 0;
 //	TB6612_setPWM(2,100);
 
         /* ×´Ì¬Ö¸Ê¾µÆ£ºPC13 µÄ°åÔØ LED
@@ -1184,75 +1510,8 @@ int main(void)
         }
 
 
-        /* ---------- OLED ²¼¾Ö£º128x64£¬OLED_6X8 ×ÖÌåÃ¿×Ö 6 ÏñËØ¿í ----------
-         *   y=0        D<Div> <ms>ms  M<Max> m<Min>         ²ÉÑù·ÖÆµ/ÖÜÆÚ/»Ò¶È·¶Î§
-         *   y=8        T<ãĞÖµ> Z<ÖĞÏß> <×ó>-<ÓÒ> L<¶ªÏß>     x=92: C<×´Ì¬> <×ª½Ç>
-         *   y=16..31   128 ÏñËØ»Ò¶È²¨ĞÎ£¨ºÚÏß±íÏÖÎªÏÂÏİ£©
-         *   y=32       T:<½Ç¶È»·Ä¿±ê>       x=60: Yaw:<Æ«º½½Ç>
-         *   y=40       Angle:<Çã½ÇÊµ²â>
-         *   y=48       O:<½Ç¶È»·Êä³ö>       x=70: S:<ÓÒÂÖËÙ¶È>
-         *   y=56       TRK<!/-><×ªÏòÄ¿±ê>   x=84: S<×óÂÖËÙ¶È>
-         *
-         * Ã¿ĞĞ×î¶à 21 ¸ö×Ö·û£¨128/6£©£¬×î³¤µÄÊÇ "T255 Z127 127-127 L1" = 20 ×Ö·û£¬
-         * ¸ÕºÃ²»Ô½½ç¡£¸Ä¸ñÊ½Ç°ÏÈÊı³¤¶È¡£
-         * OLED.c Ğ´»º³åÓÃµÄÊÇ |=£¬ËùÒÔÃ¿Ö¡±ØĞëÏÈ OLED_Clear()£¬·ñÔòÉÏÒ»Ö¡µÄ×Ö»áÖØÓ°¡£
-         * Ïë¿´ PID ²ÎÊıÊ±°ÑÏÂÃæ KP/KI/KD ÄÇ¼¸ĞĞ×¢ÊÍ·Å¿ª£¬
-         * Í¬Ê±°Ñ CCD µÄ y=0/y=8 Å²¿ª£¬±ğÈÃ y=8 ×²µ½ KP ÄÇÒ»ĞĞ¡£ */
-        OLED_Clear();
-/* ===================== CCD ²¨ĞÎÏÔÊ¾ =====================
- * »Ò¶ÈÖµ 0..CCD_Max ÏßĞÔÓ³Éäµ½ 0..15 ÏñËØ¸ß£¬»­³ÉÖù×´Í¼£º
- * Ô½ºÚ(»Ò¶ÈÔ½µÍ)Öù×ÓÔ½¶Ì£¬ËùÒÔºÚÏßÔÚ»­ÃæÉÏ±íÏÖÎª"ÏÂÏİ"¡£
- * ãĞÖµÏßµ¥¶ÀÓÃµãÏß»­³öÀ´£¨Ã¿ 4 ÏñËØÒ»¸öµã£©£¬·½±ã¿´ãĞÖµ¿¨ÔÚÄÄÀï¡£
- *
- * ccd_adc[] ÓÉ TIM3 ÖĞ¶ÏĞ´¡¢Ö÷Ñ­»·¶Á£¬¿ÉÄÜ¶Áµ½°ëÖ¡£¬
- *   Îó²îÖ»ÓĞ 0.6ms/(CCD_Div x 10ms) Ô¼ 1.5%£¬Ö»Ó°Ïì×îºóÒ»ÁĞ£¬Ò»Ö¡¾Í»Ö¸´¡£
- * 128 ¸ö OLED_DrawPoint Ô¼ 130us£¬Ïà¶Ô OLED_Update() µÄ ~23ms ¿ÉÒÔºöÂÔ¡£ */
-        {
-            uint8_t  k;
-            uint16_t den = CCD_Max ? CCD_Max : 1u;   /* ·À³ıÁã£º±¾Ö¡×î´ó»Ò¶È¿ÉÄÜÎª 0 */
-            uint8_t  ty;
-
-            OLED_Printf(0, 0, OLED_6X8, "D%u %ums M%u m%u",
-                        (unsigned)CCD_Div, (unsigned)(CCD_Div * 10u),
-                        (unsigned)CCD_Max, (unsigned)CCD_Min);
-
-            OLED_Printf(0, 8, OLED_6X8, "T%u Z%u %u-%u L%u",
-                        (unsigned)CCD_Yuzhi, (unsigned)CCD_Zhongzhi,
-                        (unsigned)CCD_Left,  (unsigned)CCD_Right, (unsigned)CCD_Lost);
-
-            /* Ö±½Ç×´Ì¬Óë×ª½Ç£ºC0=Ñ­¼£ÖĞ C1=×ªÍäÖĞ C2=×ªÍêµÈÏß£¬ºóÃæÊÇÀÛ¼Æ×ª½Ç */
-            OLED_Printf(92, 8, OLED_6X8, "C%u%+03.0f",
-                        (unsigned)CornerState, (double)YawTurned);
-
-            /* ²¨ĞÎ£ºÒ»´ÎÒ»ÁĞ£¬128 ÁĞ»­ÂúÕûÆÁ */
-            for (k = 0; k < CCD_PIXELS; k++)
-            {
-                uint8_t h = (uint8_t)((uint32_t)ccd_adc[k] * 15u / den);
-                if (h > 15) h = 15;
-                OLED_DrawPoint(k, (int16_t)(31 - h));
-            }
-
-            /* ãĞÖµÏß£¨µãÏß£¬Ã¿ 4 ÏñËØÒ»¸öµã£©£º¶ÔÓ¦»Ò¶È¸ßµÍµÄ»ù×¼ */
-            ty = (uint8_t)(31 - ((uint32_t)CCD_Yuzhi * 15u / den));
-            if (ty > 31) ty = 31;
-            for (k = 0; k < CCD_PIXELS; k += 4) OLED_DrawPoint(k, (int16_t)ty);
-        }
-
-//        OLED_Printf(0, 0, OLED_6X8, "ST:%s %d", StateStr(), (int)ErectTime);   /* ×´Ì¬ + ÆğÁ¢¼ÆÊ±(ms) */
-//        OLED_Printf(0, 8, OLED_6X8, "KP:%05.2f//%05.2f//%05.2f ", AnglePID.Kp, SpeedPID.Kp, TurnPID.Kp);  // Èı¸ö»·µÄ Kp
-//        OLED_Printf(0, 16, OLED_6X8, "KI:%05.2f//%05.2f//%05.2f", AnglePID.Ki, SpeedPID.Ki, TurnPID.Ki);  // Èı¸ö»·µÄ Ki
-//        OLED_Printf(0, 24, OLED_6X8, "KD:%05.2f//%05.2f//%05.2f", AnglePID.Kd, SpeedPID.Kd, TurnPID.Kd);  // Èı¸ö»·µÄ Kd
-        OLED_Printf(0, 32, OLED_6X8, "T:%+05.1f", AnglePID.Target);	// ½Ç¶È»·Ä¿±êÖµ£¨Ò²¾ÍÊÇÄ¿±êÇã½Ç£©
-        OLED_Printf(60, 32, OLED_6X8, "Yaw:%+07.2f", Yaw);			// Æ«º½½Ç(¶È)£º×ó×ªÎªÕı
-        OLED_Printf(0, 40, OLED_6X8, "Angle:%+05.1f", Angle);			// Çã½ÇÊµ²âÖµ
-        OLED_Printf(0, 48, OLED_6X8, "O:%+05.0f", AnglePID.Out);	// ½Ç¶È»·Êä³ö
-//        OLED_Printf(0, 56, OLED_6X8, "GX%+05.1f", GX / GYRO_LSB_PER_DPS);  /* X ½ÇËÙ¶È(¡ã/s)£¬¾²Ö¹Ó¦Îª 0 */
-//        OLED_Printf(42, 56, OLED_6X8, "GZ%+05.1f", GZ / GYRO_LSB_PER_DPS);  /* Z ½ÇËÙ¶È(¡ã/s)£¬¾²Ö¹Ê±Ó¦½Ó½ü YAW_BIAS_DPS */
-//        OLED_Printf(70, 40, OLED_6X8, "G:%+02.2f", G);
-        OLED_Printf(70, 48, OLED_6X8, "S:%+02.2f", RightSpeed);
-        OLED_Printf(84, 56, OLED_6X8, "S%+02.2f", LeftSpeed);
-        OLED_Printf(0, 56, OLED_6X8, "TRK%c%+05.2f", TrackMode ? '!' : '-', TurnPID.Target);/* ! = Ñ­¼£ÖĞ£¬- = ²»Ñ­¼£ */
-        OLED_Update();
+        /* ÕûÆÁ×´Ì¬äÖÈ¾£¨²¼¾Ö×¢ÊÍ¼û OLED_RenderStatus º¯ÊıÍ·£©£ºË¢ĞÂ + µç³ØÑ²¼ì */
+        OLED_RenderStatus();
 
 
         /* ---- À¶ÑÀÃüÁî£ºÁ½ÖÖ·¢·¨¶¼Ö§³Ö ----
@@ -1303,15 +1562,8 @@ int main(void)
             {
                 if (!TrackMode)
                 {
-                    /* ¢Ú ½øÑ­¼£¡£¶ªÏß¼ÆÊı¡¢×ªÏòÄ¿±ê¡¢Ö±½Ç×´Ì¬Ò»ÆğÇåÁã£¬
-                     * ·ñÔò»á´ø×ÅÉÏÒ»ÂÖµÄÖ¸ÁîºÍ PIVOT ×´Ì¬Ë²¼äÇÀÒ»ÏÂ¡£ */
-                    TrackMode      = 1;
-                    TrackLostCnt   = 0;
-                    TurnTargetCmd  = 0.0f;
-                    CornerState    = CORNER_LINE;
-                    CornerSeen     = 0;
-                    TSeen          = 0;
-                    TCount         = 0;   /* Ã¿´ÎÖØĞÂ¿ªÑ­¼££¬T ¼ÆÊı´ÓÍ·Ëã */
+                    /* ¢Ú ½øÑ­¼££º×´Ì¬ÇåÁãÂß¼­¼û Track_Reset() ×¢ÊÍ */
+                    Track_Reset(1u);
                 }
                 else
                 {
@@ -1343,151 +1595,17 @@ int main(void)
             else if (cmd == '0') { StopCar(); }
             else if (cmd == 'T' || cmd == 't')
             {
-                /* ÇĞ»»Ñ­¼£¿ª¹Ø¡£Ë³ÊÖÇå¶ªÏß¼ÆÊıºÍ×ªÏòÄ¿±ê£¬±ÜÃâÇĞ»»Ë²¼äÇÀÒ»ÏÂ
-                 * ·ñÔò»á´ø×ÅÉÏÒ»ÂÖÑ­¼£ÁôÏÂµÄ Target ³åÒ»ÏÂ¡£ */
-                TrackMode      = !TrackMode;
-                TrackLostCnt   = 0;
-                TurnTargetCmd  = 0.0f;
-                CornerState    = CORNER_LINE;   /* Ë³´øÇåµôÖ±½Ç×ªÍä×´Ì¬ */
-                CornerSeen     = 0;
-                TSeen          = 0;
-                TCount         = 0;   /* Ã¿´ÎÇĞ»»ÖØĞÂÊı T */
+                /* ÇĞ»»Ñ­¼£¿ª¹Ø£¨×´Ì¬ÇåÁãÂß¼­¼û Track_Reset ×¢ÊÍ£© */
+                Track_Reset(!TrackMode);
             }
         }
 
-        /* ÂÖÑ¯½ÓÊÕ»º³å£¬´¦ÀíÊÕµ½µÄ [°ü] */
-        for (i = 0; i < 2; i++)
-        {
-            if (BlueSerial_RxFlag[i] == 1)
-            {
-                char *Tag = strtok(BlueSerial_RxPacket[i], ",");	// È¡µÚ 1 ¶Î£¬×÷Îª±êÇ© Tag
+        /* ÂÖÑ¯½ÓÊÕ»º³å£¬´¦ÀíÊÕµ½µÄ [°ü]£¨·ÖÅÉÂß¼­¼û Blue_ProcessPackets º¯ÊıÍ·£© */
+        Blue_ProcessPackets();
 
-                if (Tag != NULL)
-                {
-                    if (strcmp(Tag, "1") == 0)                  /* ÊÕµ½ [1] -> ÆğÁ¢ */
-                    {
-                        StartErect();
-                    }
-                    else if (strcmp(Tag, "0") == 0)             /* ÊÕµ½ [0] -> ¼±Í£ */
-                    {
-                        StopCar();
-                    }
-                    else if (strcmp(Tag, "t") == 0)             /* ÊÕµ½ [t] -> ÇĞ»»Ñ­¼££¨Ö»ÈÏĞ¡Ğ´£»´óĞ´ T Çë·¢Âã×Ö½Ú£© */
-                    {
-                        TrackMode      = !TrackMode;
-                        TrackLostCnt   = 0;
-                        TurnTargetCmd  = 0.0f;
-                        CornerState    = CORNER_LINE;   /* Ë³´øÇåµôÖ±½Ç×ªÍä×´Ì¬ */
-                        CornerSeen     = 0;
-                        TSeen          = 0;
-                        TCount         = 0;   /* Ã¿´ÎÇĞ»»ÖØĞÂÊı T */
-                    }
-                    else if (strcmp(Tag, "key") == 0)           /* [key,Ãû³Æ,¶¯×÷]£º°´¼üÊÂ¼şÖ¡ */
-                    {
-                        char *Name = strtok(NULL, ",");			// È¡µÚ 2 ¶Î£¬×÷Îª°´¼üÃû³Æ
-                        char *Action = strtok(NULL, ",");		// È¡µÚ 3 ¶Î£¬×÷Îª°´¼ü¶¯×÷
-
-                        /* ÕâÀïÖ´ĞĞ°´¼ü¶ÔÓ¦µÄ¶¯×÷£¬Ä¿Ç°Ã»ÓĞĞèÒª´¦ÀíµÄ */
-                    }
-                    else if (strcmp(Tag, "slider") == 0)	// [slider,Ãû³Æ,Öµ]£º»¬¿éÖ¡£¬ÓÃÀ´ÔÚÏß¸Ä²ÎÊı
-                    {
-                        char *Name = strtok(NULL, ",");			// È¡µÚ 2 ¶Î£¬×÷Îª²ÎÊıÃû
-                        char *Value = strtok(NULL, ",");		// È¡µÚ 3 ¶Î£¬×÷Îª²ÎÊıÖµ
-
-                        /* Ö´ĞĞ»¬¿é¶ÔÓ¦µÄ¶¯×÷£¬°ÑĞÂÖµĞ´µ½¶ÔÓ¦µÄ PID ²ÎÊı */
-                        if (strcmp(Name, "AngleKp") == 0)	// ²ÎÊıÃûÎª AngleKp
-                        {
-                            AnglePID.Kp = atof(Value);		// Ğ´Èë½Ç¶È»· Kp
-                        }
-                        else if (strcmp(Name, "AngleKi") == 0)	// ²ÎÊıÃûÎª AngleKi
-                        {
-                            AnglePID.Ki = atof(Value);		// Ğ´Èë½Ç¶È»· Ki
-                        }
-                        else if (strcmp(Name, "AngleKd") == 0)	// ²ÎÊıÃûÎª AngleKd
-                        {
-                            AnglePID.Kd = atof(Value);		// Ğ´Èë½Ç¶È»· Kd
-                        }
-                        else if (strcmp(Name, "G") == 0)	// ²ÎÊıÃûÎª G£¨½Ç¶È¼Æ°²×°Æ«ÖÃ£©
-                        {
-                            G = atof(Value);		// Ğ´Èë°²×°Æ«ÖÃ
-                        }
-                        else if (strcmp(Name, "SpeedKp") == 0)		// ²ÎÊıÃûÎª SpeedKp
-                        {
-                            SpeedPID.Kp = atof(Value);				// Ğ´ÈëËÙ¶È»· Kp
-                        }
-                        else if (strcmp(Name, "SpeedKi") == 0)		// ²ÎÊıÃûÎª SpeedKi
-                        {
-                            SpeedPID.Ki = atof(Value);				// Ğ´ÈëËÙ¶È»· Ki
-                        }
-                        else if (strcmp(Name, "SpeedKd") == 0)		// ²ÎÊıÃûÎª SpeedKd
-                        {
-                            SpeedPID.Kd = atof(Value);				// Ğ´ÈëËÙ¶È»· Kd
-                        }
-                        else if (strcmp(Name, "TurnKp") == 0)		// ²ÎÊıÃûÎª TurnKp
-                        {
-                            TurnPID.Kp = atof(Value);				// Ğ´Èë×ªÏò»· Kp
-                        }
-                        else if (strcmp(Name, "TurnKi") == 0)		// ²ÎÊıÃûÎª TurnKi
-                        {
-                            TurnPID.Ki = atof(Value);				// Ğ´Èë×ªÏò»· Ki
-                        }
-                        else if (strcmp(Name, "TurnKd") == 0)		// ²ÎÊıÃûÎª TurnKd
-                        {
-                            TurnPID.Kd = atof(Value);				// Ğ´Èë×ªÏò»· Kd
-                        }
-
-                    }
-                    else if (strcmp(Tag, "joystick") == 0)		// [joystick,LH,LV,RH,RV]£ºÒ¡¸ËÖ¡
-                    {
-                        int8_t LH = atoi(strtok(NULL, ","));		// È¡µÚ 2 ¶Î£¬×÷ÎªÒ¡¸ËÖµ LH
-                        int8_t LV = atoi(strtok(NULL, ","));		// È¡µÚ 3 ¶Î£¬×÷ÎªÒ¡¸ËÖµ LV
-                        int8_t RH = atoi(strtok(NULL, ","));		// È¡µÚ 4 ¶Î£¬×÷ÎªÒ¡¸ËÖµ RH
-                        int8_t RV = atoi(strtok(NULL, ","));		// È¡µÚ 5 ¶Î£¬×÷ÎªÒ¡¸ËÖµ RV
-
-                        /* Ö´ĞĞÒ¡¸Ë¶¯×÷ */
-                        /* Ò¡¸ËËÀÇø£º°´ ¡À5 ¶¶¶¯Æ¯ÒÆ */
-                        if (LV > -5 && LV < 5) { LV = 0; }
-                        if (!TrackMode) SpeedTargetCmd = LV / 50.0;   /* Ñ­¼£Ê±Ç°½øËÙ¶ÈÓÉ TRACK_SPEED ¸ø£¬50ms ¶Î»á¸²¸Ç */
-
-                        /* Ñ­¼£Ä£Ê½ÏÂÒ¡¸ËµÄ×ªÏò±»ÆÁ±Î£º
-                         *   Ñ­¼£×Ô¼ºĞ´ TurnPID.Target À´¾ÀÆ«£¬Ò¡¸ËÔÙĞ´Ò»´Î»á´ò¼Ü£»
-                         *   Á½Õß¹²ÓÃÍ¬Ò»¸ö±äÁ¿£¬ËùÒÔÖ»ÔÚ·ÇÑ­¼£Ê±½ÓÊÜ RH */
-                        if (!TrackMode)
-                        {
-                            if (RH > -5 && RH < 5) { RH = 0; }
-                            TurnTargetCmd = RH / 60.0;   // RH>0 = ÓÒ×ª£»/60 ±ÈÔ­ /50 ÉÔÈí£¬ÅäºÏĞ±ÆÂ¼õÉÙ´ò»¬
-                            if (TurnTargetCmd != 0.0f && LV == 0)
-                                SpeedTargetCmd = 0.20f;  /* Ö»×ªÏò²»Ç°½øÊ±¸øÒ»µãÇ°½øËÙ¶È£¬±ÜÃâÔ­µØ´ò×ª */
-                        }
-
-                    }
-                }
-
-                BlueSerial_RxFlag[i] = 0;				// ´¦ÀíÍêÇå³ı±êÖ¾Î»£¬µÈ´ıÏÂÒ»´Î
-            }
-        }
-
-        /* ---------- ÉÏÎ»»úÁ´Â·£ºÀ¶ÑÀµ÷ÊÔ¿Ú£¨¿ÉÑ¡£©---------
-         * Á½ÌõÂ·¶¼×ß huart3(À¶ÑÀ)£¬¶¼ÔÚÕâÒ»¸öÑ­»·ÀïÅÅ¶Ó£º
-         *   [plot,GZ,Yaw]    Ã¿Ö¡Ô¼ 19 ×Ö½Ú£¬Ö»·¢×´Ì¬Á¿£¬µ÷ÊÔÊ±¶¢²¨ĞÎÓÃ
-         *   CCD_SendFrame()  Ã¿Ö¡ 270 ×Ö½Ú£¬'*LD' + 264 hex + '00' + '#'
-         *                    ´ø 128 ¸öÔ­Ê¼µã£¬¿ÉÒÔ¿´ºÚÏßÂäÔÚÄÄ¸öÎ»ÖÃ
-         *
-         * ÎªÊ²Ã´Ä¬ÈÏÊÇ×¢ÊÍµôµÄ£º
-         *   ´®¿ÚÊÇÓ²¼ş×èÈû·¢ËÍ£¬·¢µÄ×Ö½ÚÔ½¶à£¬Ö÷Ñ­»·Ò»È¦¾ÍÔ½³¤¡£
-         *   USART3 °´ 9600 ²¨ÌØËã£¬270 ×Ö½ÚÒª 281ms£¬¶øÖ÷Ñ­»·Ò»È¦Ô¼ 45ms£¬
-         *   µÈÓÚ°ÑÒ»ÌõÁ´Â·À­³¤µ½ ~326ms£»CCD 40ms Ò»Ö¡£¬ÕâÊ±ºò 8 Ö¡²Å¸üĞÂ 7 Ö¡£¬
-         *   OLED Ë¢ĞÂÒ²»á¸ú×Å¿¨¡£
-         *   19 ×Ö½ÚµÄ [plot] Ö»Òª ~20ms£¬Óë OLED_Update() µÄ ~23ms Ïàµ±£¬
-         *   ¶ÔÑ­¼£Ó°Ïì²»´ó(Ö÷Ñ­»·Ô¼ 44.6ms)£¬¿ÉÒÔ½ÓÊÜ¡£
-         *   ÏëÒª²¨ĞÎÓÖ²»ÏëÎşÉüÌ«¶à£º°Ñ USART3 Ìáµ½ 115200£¬
-         *   270 ×Ö½Ú½µµ½ 23.4ms£¬Í¬Ê±ÉÏÎ»»úÒ²Òª¸Ä³É 115200£¬·ñÔòÖ±½Ó¶ÏÁ´¡£
-         *
-         * CCD_SendFrame() Ö»·¢×î½üÒ»Ö¡µÄÊı¾İ(ccd.c:301-319)£¬²»ÅÅ¶Ó¡¢²»»º´æ¡£
-         *
-         * ´ò¿ªµÄ»°£¬Á½¸öÖ»ÄÜ¿ªÒ»¸ö£ºÍ¬Ê±¿ª¾Í»á»¥ÏàÅÅ¶Ó£¬°ÑÖ÷Ñ­»·ÍÏËÀ¡£ */
-//        len = sprintf(display_buf, "[plot:%f,%f,%d,%d,%d,%f\n]",TurnPID.Target,TurnPID.Actual1,LeftPWM,RightPWM,DifPWM,Angle);//GX,GZ,%dGZ,Yaw,DifSpeed,DifPWM,Angle
-        len = sprintf(display_buf, "[plot:%f\n]",Yaw);//,TurnPID.Target,TurnPID.Actual1,LeftPWM,RightPWM,DifPWM,AngleGX,GZ,%dGZ,DifSpeed,DifPWM,Angle
+        /* ---------- ÉÏÎ»»úÁ´Â·£ºÀ¶ÑÀµ÷ÊÔ¿Ú£¨¿ÉÑ¡£©---------*/
+        len = sprintf(display_buf, "[plot:%f,%f,%d,%d,%d,%f,%f\n]",TurnPID.Target,TurnPID.Actual1,LeftPWM,RightPWM,DifPWM,Angle,Yaw);//GX,GZ,%dGZ,Yaw,DifSpeed,DifPWM,Angle
+//        len = sprintf(display_buf, "[plot:%f\n]",Yaw);//,TurnPID.Target,TurnPID.Actual1,LeftPWM,RightPWM,DifPWM,AngleGX,GZ,%dGZ,DifSpeed,DifPWM,Angle
         HAL_UART_Transmit(&huart3, (uint8_t *)display_buf, (uint16_t)len, 100);
 
 //      CCD_SendFrame();        /* 270 ×Ö½Ú: '*LD' + 264 hex + '00' + '#' */

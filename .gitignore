@@ -16,3 +16,17 @@ keil_PID/MDK-ARM/PID/*
 !keil_PID/MDK-ARM/PID/PID.build_log.htm
 keil_PID/MDK-ARM/*.uvguix.*
 .zcode/
+
+# 工程副本与临时草稿(不入库)
+keil_PID - 副本/
+gmr_tmp/
+
+# 源码的临时备份(不入库)
+keil_PID/Core/Src/*.bak
+keil_PID/Core/Src/*.bak-*
+keil_PID/Core/Src/*.bak_*
+keil_PID/Core/Inc/*.bak
+main.c.bak_*
+main.c.GBK_GOOD_*
+/main_K.c
+/main_T.c

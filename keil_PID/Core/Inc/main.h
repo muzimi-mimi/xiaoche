@@ -31,7 +31,6 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-extern uint32_t Rx_buf[300];
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/

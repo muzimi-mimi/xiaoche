@@ -383,10 +383,13 @@ char binToHex_high(uint8_t num)
  * 注意：这里统计的是 ccd_raw[] 的 12 位原值。用 8 位的 ccd_adc[] 当判据太粗 ——
  * 一个量化台阶就是 16 LSB，整个死区才两三个台阶。
  * ==========================================================================*/
-/* 当前固定曝光 = 4 x 10ms = 40ms。CCD_AutoExposure() 目前没有任何调用点
+/* 当前固定曝光 = 2 x 10ms = 20ms。CCD_AutoExposure() 目前没有任何调用点
  * （只声明在 ccd.h，main.c 里不调），所以这个值就是实际曝光。
- * TSL1401CL 数据手册 t_int 推荐范围 0.03375~100ms。 */
-volatile uint16_t CCD_Div = 4;              /* 4 x 10ms = 40ms */
+ * TSL1401CL 数据手册 t_int 推荐范围 0.03375~100ms。
+ * 2026-10-24 由 4(40ms) 改 2(20ms)：40ms 曝光下 0.3 转/秒(约 6cm/s)就有
+ * 约 2.4mm 拖影，黑线对比度被摊薄，TrackLineSeen 闪断 -> 走走停停；
+ * 减半曝光把拖影压到约 1.2mm，代价是进光量减半，靠每帧 max/min 自适应阈值扛。 */
+volatile uint16_t CCD_Div = 2;              /* 2 x 10ms = 20ms */
 
 #define CCD_DIV_MIN     1                   /*  1 x 10ms =  10ms —— 最短曝光 */
 #define CCD_DIV_MAX     10                  /* 10 x 10ms = 100ms —— 手册 t_int 上限。
