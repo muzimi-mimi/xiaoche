@@ -76,7 +76,8 @@ main.c: ISO-8859 text, with CRLF line terminators     # 实为 GBK/CP936 + CRLF
 | 改完 | `git diff --stat -- <目标文件>` 自查改了哪些行，**不靠记忆报行号** |
 | 提交 | `git add -- <具体路径>`，只加相关文件；**不用 `-A` 裸提交** |
 | 提交信息 | 中文一句话讲清「改了什么 + 为什么」，必要时附现象/日志摘要 |
-| 推送 | 先 `git fetch`，再 `git push`；失败如实报告网络错误，不要反复重试到超时 |
+| 推送 | **必须推，不是可选**（见 7.5）。先 `git fetch`，再 `git push`；失败如实报告，不要反复重试到超时 |
+| 验推送 | `rev-parse HEAD` 与 `ls-remote origin refs/heads/main` 哈希一致才算真的上传；`ahead N` 就是没推上去 |
 
 **固件改动必须成对提交**：`main.c`（源码）+ `PID.hex` / `PID.map`（重编后产物）+ `PID.build_log.htm`。
 三样齐了才算一次"可以烧进车"的提交。
@@ -184,8 +185,36 @@ rm /d/codex/.agent-lease
 > 反例（真实踩过）：`TURN_FB_SIGN` 在 2026-10-25 由数据翻案改为 -1，10-28 又因电机通道
 > 对调翻回 +1——两次翻转各有依据但没登记，下一个 agent 只看注释就会把"正确值"改回"错误值"。
 
-### 7.5 小步提交，不留大片未提交改动
+### 7.5 ★★ 每次改动后必须提交并推送（不是"小步提交"就够了）
 
-一次逻辑改动（一个 bug 修复 / 一个功能）= 一次 编译验证 + 一次成对提交。
+**一次逻辑改动（一个 bug 修复 / 一个功能 / 一批相关编辑）= 编译验证 + 成对提交 + 推送成功。**
+三步缺一不可；**只 commit 不 push 等于没做**（同一规则的全局版本见 `$DSH_HOME/AGENTS.md` 的 G1）。
+
+**为什么必须推送**：本仓库有多个 agent / 会话。未推送的改动对别人等于不存在；
+**未跟踪（untracked）的新文件最致命** —— `car.h` / `tim3_pid.c` / `Ccd_Frame.c` 这类模块文件
+只躺在工作区却没 `git add` 时，别人 clone 下来 `main.c` 的 `#include "car.h"` 直接断，**工程根本编译不过**，
+比"看不到你的改动"更糟。
+
+**判据不能是"commit 成功"**，必须是哈希一致：
+
+```bash
+git -C D:/codex rev-parse HEAD
+git -C D:/codex ls-remote origin refs/heads/main
+# 两个哈希相等 = 真的推上去了
+```
+
+`ahead N` 且远程哈希不同 = **没推上去**，报告里必须写明「本地已提交、远程未同步」。
+
+**推送连不上时先试这一条**（本机已实测，是目前唯一有效的配置）：
+
+```bash
+git -C D:/codex config --local http.sslBackend schannel
+```
+
+症状特征：`curl https://github.com` 返回 **200**，但 `git push` 报
+`Recv failure: Connection was reset` 或 `Failed to connect to github.com:443`。
+这是 **git 的 TLS 后端（OpenSSL）** 与这条链路的差异，**不是网络不通** ——
+不要再按"开代理 / 检查端口"的思路排查（曾据此误判 4 天）。
+
 **禁止**把 1500 行的未提交改动攒在手里过夜——那既是对别人的地雷（见 7.1），
 也是对自己的一锤子买卖（覆盖后无法找回）。
