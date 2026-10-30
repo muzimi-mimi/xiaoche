@@ -1,0 +1,6 @@
+# CubeMX / 构建中间产物
+build
+mx.scratch
+
+# 注: 2026-10-30 起不再使用 VSCode, 原先在这里的 "!.settings" 例外已删除,
+#     .settings/ 改由仓库根 .gitignore 统一忽略。

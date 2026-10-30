@@ -30,3 +30,23 @@ main.c.bak_*
 main.c.GBK_GOOD_*
 /main_K.c
 /main_T.c
+
+# VSCode / STM32 VS Code 扩展生成物(2026-10-30 起不再使用 VSCode, 不入库)
+# 文件仍保留在磁盘上, 只是不纳入版本控制; 将来想恢复命令行 gcc 构建时删掉本节即可
+keil_PID/.vscode/
+keil_PID/.settings/
+keil_PID/.clangd
+keil_PID/CMakeLists.txt
+keil_PID/CMakePresets.json
+keil_PID/cmake/
+keil_PID/startup_stm32f103xb.s
+keil_PID/STM32F103xx_FLASH.ld
+keil_PID/Core/Src/syscalls.c
+keil_PID/Core/Src/sysmem.c
+keil_PID/build/
+keil_PID/mx.scratch/
+
+# 临时分析脚本与草稿(不入库)
+/work/
+/a-main.su
+/tp.c

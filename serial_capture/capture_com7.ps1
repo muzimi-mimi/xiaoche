@@ -5,8 +5,9 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
-# 6 channels, format is  "[plot:%f,%f,%d,%d,%d,%f\n]"  (note: \n sits BEFORE the ']' in firmware)
-$RX = '\[plot:(-?[0-9.]+),(-?[0-9.]+),(-?\d+),(-?\d+),(-?\d+),(-?[0-9.]+)'
+# 7 channels, format is  "[plot:%f,%f,%d,%d,%d,%f,%f\n]"  (note: \n sits BEFORE the ']' in firmware)
+# ch1..7 = TurnTargetRamp, DifSpeedFilter(Actual1), LeftPWM, RightPWM, DifPWM, Angle, Yaw
+$RX = '\[plot:(-?[0-9.]+),(-?[0-9.]+),(-?\d+),(-?\d+),(-?\d+),(-?[0-9.]+),(-?[0-9.]+)'
 
 function Get-Stats($vals) {
     $m = $vals | Measure-Object -Minimum -Maximum -Average
@@ -50,6 +51,7 @@ $L   = $m | ForEach-Object { [int]  $_.Groups[3].Value }
 $R   = $m | ForEach-Object { [int]  $_.Groups[4].Value }
 $Dif = $m | ForEach-Object { [int]  $_.Groups[5].Value }
 $Ang = $m | ForEach-Object { [double]$_.Groups[6].Value }
+$Yaw = $m | ForEach-Object { [double]$_.Groups[7].Value }
 
 $sT = Get-Stats $Tgt; $sA = Get-Stats $Act; $sD = Get-Stats $Dif; $sG = Get-Stats $Ang
 
@@ -84,5 +86,10 @@ for ($i = 0; $i -lt $Tgt.Count; $i++) { if ([Math]::Abs($Tgt[$i]) -ge 0.5 -and [
 $satL = ($L | Where-Object { [Math]::Abs($_) -ge 79 }).Count; $satR = ($R | Where-Object { [Math]::Abs($_) -ge 79 }).Count
 'LeftPWM  min={0} max={1}  clamped(|.|>=79)={2:N1}%' -f (($L | Measure-Object -Minimum).Minimum), (($L | Measure-Object -Maximum).Maximum), (100.0 * $satL / $L.Count)
 'RightPWM min={0} max={1}  clamped(|.|>=79)={2:N1}%' -f (($R | Measure-Object -Minimum).Minimum), (($R | Measure-Object -Maximum).Maximum), (100.0 * $satR / $R.Count)
+
+''
+'--- 5) Yaw (Z-gyro integral, deg; + = left) ---'
+$sY = Get-Stats $Yaw
+'min={0:N2} max={1:N2}  drift over capture = {2:N2} deg' -f $sY.Min, $sY.Max, ($Yaw[-1] - $Yaw[0])
 ''
 'COM7 released. You can reconnect VOFA+ now.'
