@@ -182,7 +182,11 @@
 
 /* ===== 自起立(Self-Erect)参数 ===== */
 #define ERECT_PWM        100		/* 甩轮 PWM(0~100)：太大车轮打滑，太小甩不起来 */
-#define ERECT_START_ANG  55.0f	/* 平衡中断阈值：|Angle| 超过它就判定摔倒，直接停车 */
+#define ERECT_START_ANG  50.0f	/* 平衡中断阈值：|Angle| 超过它就判定摔倒，直接停车。
+                                 * 必须大于 ERECT_DONE_ANG_BACK(45)：后仰起立收到 45° 就切
+                                 * 平衡环，阈值再低(<45)会把刚起立的车立刻误判成摔车。
+                                 * 2026-10-31 由 55 收紧到 50：配合大偏差快速重同步，
+                                 * 摔车/提起后 Angle 1 秒内重锁真值，这条保护才真正生效。 */
 #define ERECT_DONE_ANG   30.0f	/* 前倾起立：|Angle| 收到这个角度内就切平衡环 */
 #define ERECT_DONE_ANG_BACK 45.0f	/* 后仰起立：抬到 45 度左右就切平衡环，防止冲过头 */
 #define ERECT_TIMEOUT_MS 3000	/* 甩轮超时：3 秒还没起来就停车（电池太弱 / 卡住） */
@@ -404,6 +408,33 @@ static void Tick10_Attitude(void)
 #endif
         float Alpha = 0.001f;
         Angle = Alpha * AngleAcc + (1 - Alpha) * AngleGyro;
+
+        /* ---------- 大偏差快速重同步：摔车/提起后"假角锁死"的解药 ----------
+         * Alpha=0.001 的互补滤波对大角度偏差的拉回速率只有约 10°/s：
+         * 摔车或被提起来后真实姿态瞬间到几十度，估计角要 20 秒+ 才爬过去，
+         * 期间直立环对着假角满幅输出(车暴走后退/轮子疯转)，摔车保护
+         * (|Angle|>ERECT_START_ANG) 看着假角也永远不触发 —— 2026-10-30 实测复现：
+         * 车体提至垂直，Angle 纹丝不动卡在 -10°。
+         * 正常行驶时 AngleAcc 与 Angle 差 <5°(运动加速度冲击只有单拍毛刺)，
+         * 连续 10 拍(100ms)都超 30° 只可能是摔车/提起/卡死 —— 直接采信加速度计，
+         * 1 秒内重锁真值，直立环立刻收敛，保护判据恢复可信。
+         * (2026-10-31 按 AGENTS.md 7.3 恢复：本修复曾被 58fb8e8 的整文件保存覆盖) */
+        {
+            static uint8_t angResyncCnt = 0;
+            if (fabsf(AngleAcc - Angle) > 30.0f)
+            {
+                if (angResyncCnt < 255) angResyncCnt++;
+                if (angResyncCnt >= 10)
+                {
+                    Angle = AngleAcc;      /* 姿态失锁：直接采信加速度计 */
+                    angResyncCnt = 0;
+                }
+            }
+            else
+            {
+                angResyncCnt = 0;
+            }
+        }
 
         /* ---------- 偏航角：Z 轴陀螺仪积分 ----------
          * 这里只用固定的 dt，不做额外滤波；参数与取舍见文件头的 YAW_* 注释。
