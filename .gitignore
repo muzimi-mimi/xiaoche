@@ -50,3 +50,6 @@ keil_PID/mx.scratch/
 /work/
 /a-main.su
 /tp.c
+
+# 多 agent 认领锁(AGENTS.md 第 7.1 节):会话级软锁,不入库
+.agent-lease
