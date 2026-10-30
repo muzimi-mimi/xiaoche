@@ -27,34 +27,35 @@ void TB6612_setPWM(int n,int PWM){
 //		HAL_GPIO_WritePin(BIN2_GPIO_Port,BIN2_Pin,GPIO_PIN_SET);
 //		__HAL_TIM_SetCompare(&htim1,TIM_CHANNEL_4,-(M2));
 //	}
-	if (n == 1)			//Ö¸¶¨×óµç»ú
+	if (n == 1)			//æŒ‡å®šå·¦ç”µæœº
 	{
-		if (PWM >= 0)							//Èç¹ûÉèÖÃÕý×ªµÄPWM
-		{
-		HAL_GPIO_WritePin(AIN1_GPIO_Port,AIN1_Pin,GPIO_PIN_SET);
-		HAL_GPIO_WritePin(AIN2_GPIO_Port,AIN2_Pin,GPIO_PIN_RESET);
-		__HAL_TIM_SetCompare(&htim1,TIM_CHANNEL_1,PWM);
-		}
-		else									//·ñÔò£¬¼´ÉèÖÃ·´×ªµÄPWM
-		{
-		HAL_GPIO_WritePin(AIN1_GPIO_Port,AIN1_Pin,GPIO_PIN_RESET);
-		HAL_GPIO_WritePin(AIN2_GPIO_Port,AIN2_Pin,GPIO_PIN_SET);
-		__HAL_TIM_SetCompare(&htim1,TIM_CHANNEL_1,-(PWM));
-		}
-	}
-	else if (n == 2)	//Ö¸¶¨ÓÒµç»ú
-	{
-		if (PWM >= 0)							//Èç¹ûÉèÖÃÕý×ªµÄPWM
+		if (PWM >= 0)							//å¦‚æžœè®¾ç½®æ­£è½¬çš„PWM
 		{
 		HAL_GPIO_WritePin(BIN1_GPIO_Port,BIN1_Pin,GPIO_PIN_SET);
 		HAL_GPIO_WritePin(BIN2_GPIO_Port,BIN2_Pin,GPIO_PIN_RESET);
 		__HAL_TIM_SetCompare(&htim1,TIM_CHANNEL_4,PWM);
 		}
-		else									//·ñÔò£¬¼´ÉèÖÃ·´×ªµÄPWM
+		else									//å¦åˆ™ï¼Œå³è®¾ç½®åè½¬çš„PWM
 		{
 		HAL_GPIO_WritePin(BIN1_GPIO_Port,BIN1_Pin,GPIO_PIN_RESET);
 		HAL_GPIO_WritePin(BIN2_GPIO_Port,BIN2_Pin,GPIO_PIN_SET);
 		__HAL_TIM_SetCompare(&htim1,TIM_CHANNEL_4,-(PWM));
+		}
+
+	}
+	else if (n == 2)	//æŒ‡å®šå³ç”µæœº
+	{		
+		if (PWM >= 0)							//å¦‚æžœè®¾ç½®æ­£è½¬çš„PWM
+		{
+		HAL_GPIO_WritePin(AIN1_GPIO_Port,AIN1_Pin,GPIO_PIN_SET);
+		HAL_GPIO_WritePin(AIN2_GPIO_Port,AIN2_Pin,GPIO_PIN_RESET);
+		__HAL_TIM_SetCompare(&htim1,TIM_CHANNEL_1,PWM);
+		}
+		else									//å¦åˆ™ï¼Œå³è®¾ç½®åè½¬çš„PWM
+		{
+		HAL_GPIO_WritePin(AIN1_GPIO_Port,AIN1_Pin,GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(AIN2_GPIO_Port,AIN2_Pin,GPIO_PIN_SET);
+		__HAL_TIM_SetCompare(&htim1,TIM_CHANNEL_1,-(PWM));
 		}
 	}
 

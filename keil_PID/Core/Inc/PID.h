@@ -1,27 +1,27 @@
-#ifndef __PID_H
+ï»¿#ifndef __PID_H
 #define __PID_H
 
-typedef struct {		//¶¨ÒåPID½á¹¹Ìå±äÁ¿ÀàĞÍ
-	float Target;		//Ä¿±êÖµ£¬ÓÉÓÃ»§Éè¶¨
-	float Actual;		//Êµ¼ÊÖµ£¬´Ó´«¸ĞÆ÷¶ÁÈ¡
-	float Actual1;		//ÉÏ´ÎÊµ¼ÊÖµ
-	float Out;			//Êä³öÖµ£¬×÷ÓÃÓÚÖ´ĞĞÆ÷
+typedef struct {		//å®šä¹‰PIDç»“æ„ä½“å˜é‡ç±»å‹
+	float Target;		//ç›®æ ‡å€¼ï¼Œç”±ç”¨æˆ·è®¾å®š
+	float Actual;		//å®é™…å€¼ï¼Œä»ä¼ æ„Ÿå™¨è¯»å–
+	float Actual1;		//ä¸Šæ¬¡å®é™…å€¼
+	float Out;			//è¾“å‡ºå€¼ï¼Œä½œç”¨äºæ‰§è¡Œå™¨
 	
-	float Kp;			//±ÈÀıÏîÈ¨ÖØ
-	float Ki;			//»ı·ÖÏîÈ¨ÖØ
-	float Kd;			//Î¢·ÖÏîÈ¨ÖØ
+	float Kp;			//æ¯”ä¾‹é¡¹æƒé‡
+	float Ki;			//ç§¯åˆ†é¡¹æƒé‡
+	float Kd;			//å¾®åˆ†é¡¹æƒé‡
 	
-	float Error0;		//±¾´ÎÎó²î
-	float Error1;		//ÉÏ´ÎÎó²î
-	float ErrorInt;		//Îó²î»ı·Ö
+	float Error0;		//æœ¬æ¬¡è¯¯å·®
+	float Error1;		//ä¸Šæ¬¡è¯¯å·®
+	float ErrorInt;		//è¯¯å·®ç§¯åˆ†
 	
-	float ErrorIntMax;	//Îó²î»ı·ÖµÄ×î´óÖµ
-	float ErrorIntMin;	//Îó²î»ı·ÖµÄ×îĞ¡Öµ
+	float ErrorIntMax;	//è¯¯å·®ç§¯åˆ†çš„æœ€å¤§å€¼
+	float ErrorIntMin;	//è¯¯å·®ç§¯åˆ†çš„æœ€å°å€¼
 	
-	float OutMax;		//Êä³öÏŞ·ùµÄ×î´óÖµ
-	float OutMin;		//Êä³öÏŞ·ùµÄ×îĞ¡Öµ
+	float OutMax;		//è¾“å‡ºé™å¹…çš„æœ€å¤§å€¼
+	float OutMin;		//è¾“å‡ºé™å¹…çš„æœ€å°å€¼
 	
-	float OutOffset;	//Êä³öÆ«ÒÆ
+	float OutOffset;	//è¾“å‡ºåç§»
 } PID_t;
 
 void PID_Init(PID_t *p);

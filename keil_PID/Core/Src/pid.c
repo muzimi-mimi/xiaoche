@@ -1,13 +1,13 @@
-#include "PID.h"
+﻿#include "PID.h"
 #include "main.h"
 /**
-  * ��    ����PID��ʼ��
-  * ��    ����p ָ���ṹ��ĵ�ַ
-  * �� �� ֵ����
+  * 函    数：PID初始化
+  * 参    数：p 指定结构体的地址
+  * 返 回 值：无
   */
 void PID_Init(PID_t *p)
 {
-	/*��PID��ʾ״̬�Ĳ������㣬����֮ǰ�����Ĳ����Ա����������Ӱ��*/
+	/*把PID表示状态的参数清零，避免之前遗留的参数对本次启动造成影响*/
 	p->Target = 0;
 	p->Actual = 0;
 	p->Actual1 = 0;
@@ -18,48 +18,60 @@ void PID_Init(PID_t *p)
 }
 
 /**
-  * ��    ����PID���㼰�ṹ�����ֵ����
-  * ��    ����p ָ���ṹ��ĵ�ַ
-  * �� �� ֵ����
+  * 函    数：PID计算及结构体变量值更新
+  * 参    数：p 指定结构体的地址
+  * 返 回 值：无
   */
 void PID_Update(PID_t *p)
 {
-	/*��ȡ���������ϴ����*/
-	p->Error1 = p->Error0;					//��ȡ�ϴ����
-	p->Error0 = p->Target - p->Actual;		//��ȡ������Ŀ��ֵ��ʵ��ֵ����Ϊ���ֵ
+	/*获取本次误差和上次误差*/
+	p->Error1 = p->Error0;					//获取上次误差
+	p->Error0 = p->Target - p->Actual;		//获取本次误差，目标值减实际值，即为误差值
 	
-	/*�⻷�����֣��ۼӣ�*/
-	/*���Ki��Ϊ0���Ž��������֣���������Ŀ���Ǳ��ڵ���*/
-	/*��Ϊ�ڵ���ʱ�����ǿ����Ȱ�Ki����Ϊ0����ʱ�����������ã�����������ˣ������ֻ���۵��ܴ��ֵ*/
-	/*����һ��Ki��Ϊ0����ô��Ϊ�������Ѿ����۵��ܴ��ֵ�ˣ���͵��»�����������������ڵ���*/
-	if (p->Ki != 0)				//���Ki��Ϊ0
+	/*外环误差积分（累加）*/
+	/*如果Ki不为0，才进行误差积分，这样做的目的是便于调试*/
+	/*因为在调试时，我们可能先把Ki设置为0，这时积分项无作用，误差消除不了，误差积分会积累到很大的值*/
+	/*后续一旦Ki不为0，那么因为误差积分已经积累到很大的值了，这就导致积分项疯狂输出，不利于调试*/
+	if (p->Ki != 0)				//如果Ki不为0
 	{
-		p->ErrorInt += p->Error0;	//����������
+		/* ---- 条件积分(抗饱和) ----
+		 * 输出已经顶到限幅、误差还在往同一方向推时，停止累加。
+		 * 不加这一条会怎样：积分一路灌到 ErrorIntMax，而 SpeedPID 的
+		 *   Ki(0.21) x ErrorIntMax(10) = 2.1 度 > OutMax(2 度)
+		 * —— 积分单独就能把输出钉死在限幅上：车保持最大前倾一直加速，
+		 *    表现出来就是"越跑越快"；而且之后要靠反向误差慢慢倒回来(秒级)。
+		 * 判据用上一拍算出的 Out，差一拍是条件积分的常规做法。
+		 * TurnPID 的 Ki=0，根本走不到这里。 */
+		if (!((p->Out >= p->OutMax && p->Error0 > 0) ||
+		      (p->Out <= p->OutMin && p->Error0 < 0)))
+		{
+			p->ErrorInt += p->Error0;	//进行误差积分
+		}
 		
-		/*�������޷�*/
-		if (p->ErrorInt > p->ErrorIntMax) {p->ErrorInt = p->ErrorIntMax;}	//�������������Ϊ�ṹ��ָ����ErrorIntMax
-		if (p->ErrorInt < p->ErrorIntMin) {p->ErrorInt = p->ErrorIntMin;}	//������������СΪ�ṹ��ָ����ErrorIntMin
+		/*误差积分限幅*/
+		if (p->ErrorInt > p->ErrorIntMax) {p->ErrorInt = p->ErrorIntMax;}	//限制误差积分最大为结构体指定的ErrorIntMax
+		if (p->ErrorInt < p->ErrorIntMin) {p->ErrorInt = p->ErrorIntMin;}	//限制误差积分最小为结构体指定的ErrorIntMin
 	}
-	else							//����
+	else							//否则
 	{
-		p->ErrorInt = 0;			//������ֱ�ӹ�0
+		p->ErrorInt = 0;			//误差积分直接归0
 	}
 	
-	/*PID����*/
-	/*ʹ��λ��ʽPID��ʽ������õ����ֵ*/
+	/*PID计算*/
+	/*使用位置式PID公式，计算得到输出值*/
 	p->Out = p->Kp * p->Error0
 		   + p->Ki * p->ErrorInt
-//		   + p->Kd * (p->Error0 - p->Error1);		//��ͨPID���㹫ʽ
-		   - p->Kd * (p->Actual - p->Actual1);		//΢�����м��㹫ʽ
+//		   + p->Kd * (p->Error0 - p->Error1);		//普通PID计算公式
+		   - p->Kd * (p->Actual - p->Actual1);		//微分先行计算公式
 	
-	/*���ƫ��*/
-	if (p->Out > 0) {p->Out += p->OutOffset;}		//������ֵΪ��������Ͻṹ��ָ����OutOffset
-	if (p->Out < 0) {p->Out -= p->OutOffset;}		//������ֵΪ�������ȥ�ṹ��ָ����OutOffset
+	/*输出偏移*/
+	if (p->Out > 0) {p->Out += p->OutOffset;}		//如果输出值为正，则加上结构体指定的OutOffset
+	if (p->Out < 0) {p->Out -= p->OutOffset;}		//如果输出值为负，则减去结构体指定的OutOffset
 	
-	/*����޷�*/
-	if (p->Out > p->OutMax) {p->Out = p->OutMax;}	//�������ֵ���Ϊ�ṹ��ָ����OutMax
-	if (p->Out < p->OutMin) {p->Out = p->OutMin;}	//�������ֵ��СΪ�ṹ��ָ����OutMin
+	/*输出限幅*/
+	if (p->Out > p->OutMax) {p->Out = p->OutMax;}	//限制输出值最大为结构体指定的OutMax
+	if (p->Out < p->OutMin) {p->Out = p->OutMin;}	//限制输出值最小为结构体指定的OutMin
 	
-	/*��ȡ�ϴ�ʵ��ֵ*/
-	p->Actual1 = p->Actual;		//���ּ������б������ݣ����ּ���ʱActual1��Ϊ�ϴ�ʵ��ֵ
+	/*获取上次实际值*/
+	p->Actual1 = p->Actual;		//本轮计算后进行变量传递，下轮计算时Actual1即为上次实际值
 }

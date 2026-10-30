@@ -1,4 +1,4 @@
-/* USER CODE BEGIN Header */
+﻿/* USER CODE BEGIN Header */
 /**
   ******************************************************************************
   * @file    tim.c
@@ -160,15 +160,15 @@ void MX_TIM3_Init(void)
 
   /* USER CODE BEGIN TIM3_Init 1 */
 
-  /* ���� TIM3 = 10ms һ�ģ����� 1ms��Period ������ 10000-1������
-   * ȫϵͳ�Ŀ��ƽ��Ķ���������ھ�������Ƶ�� main.c �� TICK_10MS / TICK_50MS��
-   *     Period = 10000-1 (10ms) -> TICK_10MS = 1, TICK_50MS = 5   <- ��ǰ��Ϊ CCD ��·
+  /* 说明 TIM3 = 10ms 中断一次，不是 1ms，Period 就是 10000-1。下面两种取法：
+   * 全系统的控制节拍都由它决定，对应的分频数在 main.c 的 TICK_10MS / TICK_50MS。
+   *     Period = 10000-1 (10ms) -> TICK_10MS = 1, TICK_50MS = 5   <- 当前：为 CCD 让路
    *     Period = 1000-1  (1ms)  -> TICK_10MS = 10, TICK_50MS = 50
-   * ���߱���ɶ��޸ġ�ֻ��һ�ߵĺ������"��һ��/��һ��"�����ǣ�
-   *   - ƽ�⻷�ܵ� 1kHz�������˲���д���� dt=0.01 ��ʵ�ʲ� 10 ��
-   *   - �ٶȻ� 5ms ��һ�α�������������ٶ�С 10 ����PID ������
-   *   - get_CCD() �� 0.7ms ���� 1ms ���� -> ��Ȼ�жϳ�ʱ(TimerErrorFlag)
-   * PID.ioc ��� TIM3.Period ��ͬ���ĳ� 10000-1��CubeMX �������ɲ���Ļ����� */
+   * 两者必须成对修改。只改一边的后果就是"慢一拍/快一拍"，例如：
+   *   - 平衡环按 1kHz 整定，实际只有 100Hz，dt=0.01 差 10 倍
+   *   - 速度环 5ms 一次，但算出的速度小 10 倍，PID 会超调
+   *   - get_CCD() 要 0.7ms 超过 1ms 上限 -> 会报超时(TimerErrorFlag)
+   * PID.ioc 里的 TIM3.Period 也同步改成 10000-1，CubeMX 重新生成才不会被覆盖 */
 
   /* USER CODE END TIM3_Init 1 */
   htim3.Instance = TIM3;

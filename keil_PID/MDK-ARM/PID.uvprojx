@@ -451,6 +451,26 @@
               <FilePath>../Core/Src/main.c</FilePath>
             </File>
             <File>
+              <FileName>tim3_pid.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/tim3_pid.c</FilePath>
+            </File>
+            <File>
+              <FileName>Ccd_Frame.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/Ccd_Frame.c</FilePath>
+            </File>
+            <File>
+              <FileName>Blue_ProcessPackets.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/Blue_ProcessPackets.c</FilePath>
+            </File>
+            <File>
+              <FileName>OLED_RenderStatus.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/OLED_RenderStatus.c</FilePath>
+            </File>
+            <File>
               <FileName>gpio.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/gpio.c</FilePath>

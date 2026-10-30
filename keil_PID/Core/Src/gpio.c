@@ -70,7 +70,7 @@ void MX_GPIO_Init(void)
   /*Configure GPIO pin : PA5 */
   GPIO_InitStruct.Pin = GPIO_PIN_5;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;   /* 按键另一端接 GND：松开为高，按下产生下降沿 */
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pins : CLK_Pin SI_Pin AIN2_Pin AIN1_Pin

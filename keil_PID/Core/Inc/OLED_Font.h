@@ -1,7 +1,7 @@
-#ifndef __OLED_FONT_H
+ï»¿#ifndef __OLED_FONT_H
 #define __OLED_FONT_H
 #include "gpio.h"
-/*OLED×ÖÄ£¿â£¬¿í8ÏñËØ£¬¸ß16ÏñËØ*/
+/*OLEDå­—æ¨¡åº“ï¼Œå®½8åƒç´ ï¼Œé«˜16åƒç´ */
 const uint8_t OLED_F8x16[][16]=
 {
 	0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,

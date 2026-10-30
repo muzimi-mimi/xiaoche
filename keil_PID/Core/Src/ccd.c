@@ -1,10 +1,10 @@
-/* ============================================================================
- * TSL1401 ���� CCD ģ�飨HAL ��ֲ�棩
+﻿/* ============================================================================
+ * TSL1401 线性 CCD 模块（HAL 移植版）
  *
- * ��ȫģ�£�D:\Users\huang\Desktop\keil\CCD���ƶ��\HARDWARE\CCD\ccd.c
- * �ӿ���ƫ��˵���� ccd.h ͷ����
+ * 完全模仿：D:\Users\huang\Desktop\keil\CCD控制舵机\HARDWARE\CCD\ccd.c
+ * 接口与偏离说明见 ccd.h 头部。
  *
- * ���ţ������� = ���԰� CN3����CLK = PB0��SI = PB1��AO = PA4 (ADC1_IN4)
+ * 引脚（本工程 = 考试板 CN3）：CLK = PB0，SI = PB1，AO = PA4 (ADC1_IN4)
  * ==========================================================================*/
 
 #include "ccd.h"
@@ -12,28 +12,28 @@
 #include "usart.h"
 #include <stdio.h>
 
-/* ---------------- ���Ų������ȼ��ڲο����̵� TSL_CLK / TSL_SI �� ---------------- */
+/* ---------------- 引脚操作，等价于参考工程的 TSL_CLK / TSL_SI 宏 ---------------- */
 #define TSL_CLK_H   HAL_GPIO_WritePin(CLK_GPIO_Port, CLK_Pin, GPIO_PIN_SET)
 #define TSL_CLK_L   HAL_GPIO_WritePin(CLK_GPIO_Port, CLK_Pin, GPIO_PIN_RESET)
 #define TSL_SI_H    HAL_GPIO_WritePin(SI_GPIO_Port,  SI_Pin,  GPIO_PIN_SET)
 #define TSL_SI_L    HAL_GPIO_WritePin(SI_GPIO_Port,  SI_Pin,  GPIO_PIN_RESET)
 
-/* ---------------- ��ο�����ͬ����ȫ���� ---------------- */
+/* ---------------- 与参考工程同名的全局量 ---------------- */
 uint8_t  ccd_adc[CCD_PIXELS] = {0};
 uint16_t ccd_raw[CCD_PIXELS] = {0};
 uint8_t  SciBuf[200] = {0};
 
-/* �ο������� TIME_us ��"�ع�ʱ��"��ť����Ϊ�����ع�ʱ��͵���һ֡��ʱ����
- * �����̵��ع��� TIM3 x CCD_Div �������ƣ��������� TIME_us ֻ���� CLK ������
- * ������ = TIME_us + ADC ת��(1.5 ����Լ 1.2us) + HAL ������ȡ TIME_us=2 ʱ
- * CLK Լ 190kHz��һ֡����Լ 0.7ms��ʣ�µ�ʱ�䶼�������֣��ع⣩��
- * �ο������Ƿ�����һ֡ 2.7ms������Ϊ���� ADC ����ʱ������ 239.5 ����(21us/����)�� */
+/* 参考工程里 TIME_us 是"曝光时间"旋钮，因为它的曝光时间就等于一帧总时长。
+ * 本工程的曝光由 TIM3 x CCD_Div 独立控制，所以这里 TIME_us 只决定 CLK 快慢：
+ * 半周期 = TIME_us + ADC 转换(1.5 周期约 1.2us) + HAL 开销。取 TIME_us=2 时
+ * CLK 约 190kHz，一帧读出约 0.7ms，剩下的时间都留给积分（曝光）。
+ * 参考工程那份慢到一帧 2.7ms，是因为它的 ADC 采样时间设了 239.5 周期(21us/像素)。 */
 int TIME_us = 2;
 
-/* SI ���º󵽵�һ����ʱ��֮��ĵȴ���
- * TSL1401CL �����ֲ� Note 1 Ҫ�� tqt >= 20us��ԭʵ��д���� Dly_us(TIME_us)=2us��
- * 2026-10-17 �� test\ccd ��ֲ�� 2us�����ڶԱ����ä������20us ��д������������
- * ������� ---- Ҫ�ָ�ֻ��� RD_TSL() ���Ǿ� Dly_us(TIME_us) ���� Dly_us(CCD_TQT_US)�� */
+/* SI 落下后到第一个读时钟之间的等待。
+ * TSL1401CL 数据手册 Note 1 要求 tqt >= 20us；原实现写的是 Dly_us(TIME_us)=2us。
+ * 2026-10-17 按 test\ccd 移植回 2us（用于对比左侧盲区），20us 的写法保留在下面
+ * 这个宏里 ---- 要恢复只需把 RD_TSL() 里那句 Dly_us(TIME_us) 换回 Dly_us(CCD_TQT_US)。 */
 #define CCD_TQT_US   20
 
 uint8_t  CCD_Zhongzhi = 64;
@@ -44,7 +44,7 @@ uint8_t  CCD_Width    = 0;
 uint16_t CCD_Max      = 0;
 uint16_t CCD_Min      = 0;
 
-volatile uint8_t CCD_Lost = 1;      /* �ϵ��һ֮֡ǰ��"û�ҵ���"���� */
+volatile uint8_t CCD_Lost = 1;      /* 上电第一帧之前按"没找到线"处理 */
 
 /* ==========================================================================*/
 
@@ -62,11 +62,11 @@ static void DWT_Init(void)
 	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
 }
 
-/* �ο����̵� Dly_us() �� for(ii=0;ii<a;ii++); ��ѭ���壬ʵ�ⲻ������ʱ
- * ��-O2 ��������ɾ����������ʱ�����Ż��ȼ�Ư�ƣ����ܵ�ʱ���׼�á�
- * ���ﻻ�� DWT ���ڼ���������������ǩ�����ֲ��䡣
- * ˳��˵����ԭʵ�����Ǹ�"�� SysTick->CTRL �� 0x04"��д����� HAL �� 1ms
- * ʱ�������ص���HAL_GetTick() ���� 30ms �����ö��ᣬ����Ҳ������ SysTick�� */
+/* 参考工程的 Dly_us() 是 for(ii=0;ii<a;ii++); 空循环体，实测不产生延时
+ * （-O2 下整条被删），而且延时量随优化等级漂移，不能当时间基准用。
+ * 这里换成 DWT 周期计数器，函数名和签名保持不变。
+ * 顺带说明：原实现里那个"把 SysTick->CTRL 置 0x04"的写法会把 HAL 的 1ms
+ * 时基整个关掉，HAL_GetTick() 开机 30ms 后永久冻结，所以也不能用 SysTick。 */
 void Dly_us(int a)
 {
 	static uint8_t inited = 0;
@@ -80,9 +80,9 @@ void Dly_us(int a)
 	while ((DWT->CYCCNT - start) < ticks);
 }
 
-/* �ο����̵� Ccd_Init() �Լ��� GPIO ��ʼ������׼����⣩��
- * ������ PB0/PB1 ���� CubeMX ���ɵ� MX_GPIO_Init() ������������
- * ��������ֻ�ѿ��е�ƽ��ɲο����̵ĳ�ʼ״̬�����ֽӿ���һ�¡� */
+/* 参考工程的 Ccd_Init() 自己做 GPIO 初始化（标准外设库）。
+ * 本工程 PB0/PB1 已由 CubeMX 生成的 MX_GPIO_Init() 配成推挽输出，
+ * 所以这里只把空闲电平设成参考工程的初始状态，保持接口名一致。 */
 void Ccd_Init(void)
 {
 	TSL_CLK_H;
@@ -90,8 +90,8 @@ void Ccd_Init(void)
 }
 
 /* ============================================================================
- * RD_TSL()���� TSL1401 ʱ����� 128 �����أ�Ȼ������ֵ�����ء������ߡ�
- * ��ο���������Ӧ��ע������ƫ�봦��
+ * RD_TSL()：按 TSL1401 时序读出 128 个像素，然后算阈值、找沿、定中线。
+ * 与参考工程逐句对应，注释里标出偏离处。
  * ==========================================================================*/
 void RD_TSL(void)
 {
@@ -99,13 +99,13 @@ void RD_TSL(void)
 	uint8_t  j = 0;
 	uint8_t  lfound, rfound;
 
-	static uint8_t  Last_CCD_Zhongzhi = 64;        /* ��ο�һ�£�static ��ס��һ֡ */
-	static uint16_t value1_max, value1_min;        /* ��ο�ͬ�� */
-	static uint16_t ThMax = 0, ThMin = 0;          /* ��ֵר�õ�ƽ���� max/min */
-	static uint8_t  ThInited = 0;                  /* ��֡��ԭʼֱֵ�ӳ�ʼ����������ͨ */
+	static uint8_t  Last_CCD_Zhongzhi = 64;        /* 与参考一致：static 记住上一帧 */
+	static uint16_t value1_max, value1_min;        /* 与参考同名 */
+	static uint16_t ThMax = 0, ThMin = 0;          /* 阈值专用的平滑后 max/min */
+	static uint8_t  ThInited = 0;                  /* 首帧用原始值直接初始化，不做低通 */
 
-	/* ---- 1) SI ���壺SI ̧���ڼ��һ�� CLK �����أ������������ ---- */
-	TSL_CLK_H;                  /* CLK ������Ϊ�ߵ�ƽ */
+	/* ---- 1) SI 脉冲：SI 抬高期间给一个 CLK 上升沿，启动本次输出 ---- */
+	TSL_CLK_H;                  /* CLK 引脚设为高电平 */
 	TSL_SI_L;
 	Dly_us(TIME_us);
 
@@ -113,30 +113,30 @@ void RD_TSL(void)
 	TSL_CLK_L;
 	Dly_us(TIME_us);
 
-	TSL_CLK_H;                  /* ��̧ CLK */
-	TSL_SI_L;                   /* ���� SI ���� ����������Ⱥ��� SI �Ľ���ʱ�� */
-	Dly_us(TIME_us);             /* �� test\ccd һ��: 2us���ֲ� tqt Ҫ�� 20us�����Ϸ��꣩ */
+	TSL_CLK_H;                  /* 先抬 CLK */
+	TSL_SI_L;                   /* 再落 SI —— 靠这两句的先后抢 SI 的建立时间 */
+	Dly_us(TIME_us);             /* 与 test\ccd 一致: 2us（手册 tqt 要求 20us，见上方宏） */
 
-	/* ---- 2) ������� 128 �����أ�CLK �͵�ƽ�ڼ� AO ��Ч�� ---- */
+	/* ---- 2) 逐个读出 128 个像素（CLK 低电平期间 AO 有效） ---- */
 	for (i = 0; i < CCD_PIXELS; i++)
 	{
 		TSL_CLK_L;
 		Dly_us(TIME_us);
 		ccd_raw[tslp] = get_ADC();
-		ccd_adc[tslp] = (uint8_t)(ccd_raw[tslp] >> 4);   /* ͬ�ο���12λ -> 8λ */
+		ccd_adc[tslp] = (uint8_t)(ccd_raw[tslp] >> 4);   /* 同参考：12位 -> 8位 */
 		++tslp;
 		TSL_CLK_H;
 		Dly_us(TIME_us);
 	}
-	/* �� 129 ��ʱ�ӣ���������������ο�����û�����ʱ�ӣ����ﲹ�ϸ��ȡ� */
+	/* 第 129 个时钟：结束本次输出。参考工程没发这个时钟，这里补上更稳。 */
 	TSL_CLK_L;
 	Dly_us(TIME_us);
 	TSL_CLK_H;
 	Dly_us(TIME_us);
 
-	/* ---- 3) ��̬��ֵ�����˸�ȥ�� 5 ���㣨��ο�һ�£� ----
-	 * ƫ�룺�ο��Ǵ� ccd_adc[0] �������/��Сֵ�ģ��� [0,5) ������ͳ�������
-	 * �� 0 ����ֻҪ�ǻ���ͻ���Ⱦ������ֵ������ĳɴ������ڵĵ� 1 �������㡣 */
+	/* ---- 3) 动态阈值：两端各去掉 5 个点（与参考一致） ----
+	 * 偏离：参考是从 ccd_adc[0] 起算最大/最小值的，可 [0,5) 并不在统计区间里，
+	 * 第 0 个点只要是坏点就会污染整个阈值。这里改成从区间内的第 1 个点起算。 */
 	value1_max = ccd_adc[5];
 	for (i = 5; i < 123; i++)
 	{
@@ -151,15 +151,15 @@ void RD_TSL(void)
 			value1_min = ccd_adc[i];
 	}
 
-	CCD_Max   = value1_max;      /* ����/�����Ա�ԭʼֵ�����㿴��ʵ��̬��Χ */
+	CCD_Max   = value1_max;      /* 屏上/串口仍报原始值，方便看真实动态范围 */
 	CCD_Min   = value1_min;
 
-	/* ---- 3b) ��ֵ֡��ƽ�� ----
-	 * �����õ���"���� 3 �� + �ϸ񲻵Ⱥ�"��������Ч��ֵ��һ����ɢ�ĳݡ��ݼ��ж���
-	 * ��������ǡ�õ�����ֵʱ��> �� < ͬʱ��������������ֱ����ʧ������ T ֻҪ֡��
-	 * �� 1 �����ؾͻ�����������֮���� 1~2 ������ ���� ʵ�⾲ֹʱ ��0.5px���˶�ʱ ��2.7px��
-	 * ����� max/min ��һ�׵�ͨ���� T ����ͬһ�����
-	 * ֻ�� CCD_Yuzhi ��ƽ��ֵ��CCD_Max/Min ����ԭʼ���������ϵĶ�̬��Χ����ֵ�Բ��ϡ� */
+	/* ---- 3b) 阈值帧间平滑 ----
+	 * 找沿用的是"连续 3 个 + 严格不等号"，它的有效阈值是一排离散的齿、齿间有洞：
+	 * 过渡像素恰好等于阈值时，> 和 < 同时不成立，整条沿直接消失。所以 T 只要帧间
+	 * 抖 1 级，沿就会在相邻两齿之间跳 1~2 个像素 —— 实测静止时 ±0.5px、运动时 ±2.7px。
+	 * 这里对 max/min 做一阶低通，把 T 按在同一个齿里。
+	 * 只有 CCD_Yuzhi 用平滑值，CCD_Max/Min 保持原始，否则屏上的动态范围和阈值对不上。 */
 	if (ThInited == 0)
 	{
 		ThMax    = value1_max;
@@ -172,20 +172,20 @@ void RD_TSL(void)
 		ThMin = (uint16_t)((ThMin * 3 + value1_min) >> CCD_TH_SHIFT);
 	}
 
-	CCD_Yuzhi = (uint8_t)((ThMax + ThMin) / 2);   /* ����������ȡ����ֵ */
+	CCD_Yuzhi = (uint8_t)((ThMax + ThMin) / 2);   /* 本次中线提取的阈值 */
 
-	/* ---- 4) ������������ ----
-	 * �׵׺��ߣ�������"��"���������� ��->�ͣ������� ��->�ߡ� */
+	/* ---- 4) 找左右跳变沿 ----
+	 * 白底黑线：黑线是"低"区。左沿找 高->低，右沿找 低->高。 */
 	lfound = 0;
 	rfound = 0;
 
-	/* ����ǰ��λ���ڱ�ֵ��ԭ��ֻ���ϵ��ֵ��һ���ҵ�������Ҳ����λ������
-	 * "��һ֡û�ҵ�"��"��һ֡�ҵ���"�����ϡ���������ȫ�ֲ����� ���� ʵ����־
-	 * ��ͷ�� 97 ֡�� (0,127) ������ô���ġ���λ�� (0,127) ��ȷ��ʾ"��֡û�ҵ���"�� */
+	/* 找沿前复位到哨兵值。原来只靠上电初值，一旦找到过就再也不复位，于是
+	 * "这一帧没找到"和"这一帧找到了"在屏上、串口里完全分不出来 —— 实测日志
+	 * 开头那 97 帧的 (0,127) 就是这么来的。复位后 (0,127) 明确表示"本帧没找到沿"。 */
 	CCD_Left  = 0;
 	CCD_Right = CCD_PIXELS - 1;
 
-	for (i = 5; i < 118; i++)                       /* Ѱ����������� */
+	for (i = 5; i < 118; i++)                       /* 寻找左边跳变沿 */
 	{
 		if (ccd_adc[i]   > CCD_Yuzhi && ccd_adc[i+1] > CCD_Yuzhi && ccd_adc[i+2] > CCD_Yuzhi &&
 		    ccd_adc[i+3] < CCD_Yuzhi && ccd_adc[i+4] < CCD_Yuzhi && ccd_adc[i+5] < CCD_Yuzhi)
@@ -196,59 +196,74 @@ void RD_TSL(void)
 		}
 	}
 
-	for (j = 118; j > 5; j--)                       /* Ѱ���ұ������� */
+	/* ---- 右沿不再全幅独立扫描，而是按线宽窗口配对 ----
+	 * 有效线宽被限定在 [CCD_LW_MIN, CCD_LW_MAX]，所以左沿一旦定下来，右沿
+	 * 必然落在 [Left+LW_MIN, Left+LW_MAX] 内。把"配对"做成搜索条件本身：
+	 *   原来左右各自独立扫描、事后再比对，实测 19.5% 的帧右沿落在左沿左边，
+	 *   这些帧只能整帧丢弃（CCD_Lost），白扔近两成数据。
+	 *   现在窗口外的沿根本进不了候选，配对是结构性成立的，不用再事后否决。
+	 * j 上限压到 118（与原实现一致）：模式要读 j+5，正好落在可信区末尾 123。 */
+	if (lfound)
 	{
-		if (ccd_adc[j]   < CCD_Yuzhi && ccd_adc[j+1] < CCD_Yuzhi && ccd_adc[j+2] < CCD_Yuzhi &&
-		    ccd_adc[j+3] > CCD_Yuzhi && ccd_adc[j+4] > CCD_Yuzhi && ccd_adc[j+5] > CCD_Yuzhi)
+		uint8_t jhi = (uint8_t)(CCD_Left + CCD_LW_MAX);
+		uint8_t jlo = (uint8_t)(CCD_Left + CCD_LW_MIN);
+
+		if (jhi > 118) jhi = 118;
+
+		for (j = jhi; j >= jlo && j > 5; j--)       /* 由外向内找第一个上升沿 */
 		{
-			CCD_Right = j;
-			rfound    = 1;
-			break;
+			if (ccd_adc[j]   < CCD_Yuzhi && ccd_adc[j+1] < CCD_Yuzhi && ccd_adc[j+2] < CCD_Yuzhi &&
+			    ccd_adc[j+3] > CCD_Yuzhi && ccd_adc[j+4] > CCD_Yuzhi && ccd_adc[j+5] > CCD_Yuzhi)
+			{
+				CCD_Right = j;
+				rfound    = 1;
+				break;
+			}
 		}
 	}
 
-	/* ---- 5) �ɶԺ����Լ�� + ���� + �����ж� ----
-	 * ƫ�룺�ο������� Left/Right �� static �ҴӲ���λ���Ҳ�����ʱ��������һ֡��
-	 * ֵ������"�߶���"����¶�����ȫ���ɼ� ���� ������"����ѭ����Ҫ��ֱ��"��û��
-	 * �л��źſ��á����ﱣ��"��������һ֡����"����Ϊ�����Ѷ���״̬��ʽ����ȥ�� */
+	/* ---- 5) 成对合理性检查 + 中线 + 丢线判定 ----
+	 * 偏离：参考工程里 Left/Right 是 static 且从不复位，找不到沿时就沿用上一帧的
+	 * 值，于是"线丢了"这件事对外完全不可见 —— 考核里"进无循迹区要切直线"就没有
+	 * 切换信号可用。这里保留"继续用上一帧中线"的行为，但把丢线状态显式报出去。 */
 	if (lfound && rfound && CCD_Right > CCD_Left)
 	{
-		/* �оݴ� max-min ���������£����� 712 ֡������־����
-		 *   a) ���ر����������ұߡ����������������Զ���ɨ�衢�м�û�����Լ����
-		 *      ʵ�� 19.5% ��֡��������������ߣ��������"����"��ȫ�����壻
-		 *   b) �߿����� [CCD_LW_MIN, CCD_LW_MAX]��ʵ����Ч�߿� 16~28����
-		 *   c) ����� - ���ں� >= CCD_CONTRAST_MIN�������Ǿֲ��Աȶȡ�
-		 * ԭ���õ� max-min ���� c+g�������ݶȻ�����޹�ˮ������Խ����Խ���׹�����
-		 * ����ʵ��ֻ�� 10~13����Զ�ﲻ�� 20 ���� ���� CCD_Zhongzhi �ӿ�����Ͷ��� 64��
-		 * ע�� CCD_Left ��ѭ����֤���� [5,117]�����������±�ֱ����� [0,112]��[10,122]�� */
+		/* 判据（依据 712 帧串口日志）：
+		 *   a) 右沿在左沿右边、且线宽落在 [CCD_LW_MIN, CCD_LW_MAX]。
+		 *      ★ 这两条现在由第 4 步的"窗口配对搜索"结构性保证，这里保留只为防御：
+		 *      原来左右独立扫描时有 19.5% 的帧右沿落在左沿左边，只能整帧丢弃。
+		 *   b) 线外白 - 线内黑 >= CCD_CONTRAST_MIN，量的是局部对比度。
+		 * 原来用的 max-min 等于 b+g，光照梯度会把门限灌水（画面越不匀越容易过），
+		 * 而且实测只有 10~13，永远达不到 20 —— 所以 CCD_Zhongzhi 从开机起就冻在 64。
+		 * 注意 CCD_Left 由循环保证落在 [5,117]，下面两个下标分别落在 [0,112]、[10,122]。 */
 		uint8_t lw  = (uint8_t)(CCD_Right - CCD_Left);
-		uint8_t wpx = ccd_adc[CCD_Left - 5];    /* �����İ� */
-		uint8_t bpx = ccd_adc[CCD_Left + 5];    /* ���ڵĺ� */
+		uint8_t wpx = ccd_adc[CCD_Left - 5];    /* 线左侧的白 */
+		uint8_t bpx = ccd_adc[CCD_Left + 5];    /* 线内的黑 */
 
 		if (lw >= CCD_LW_MIN && lw <= CCD_LW_MAX &&
 		    wpx > bpx && (uint8_t)(wpx - bpx) >= CCD_CONTRAST_MIN)
 		{
 			CCD_Width    = lw;
-			CCD_Zhongzhi = (uint8_t)((CCD_Right + CCD_Left) / 2);   /* ��������λ�� */
+			CCD_Zhongzhi = (uint8_t)((CCD_Right + CCD_Left) / 2);   /* 计算中线位置 */
 			CCD_Lost     = 0;
 		}
 		else
 		{
-			CCD_Lost = 1;   /* �ز���� / �߿����� / �ֲ��ԱȶȲ��� = ��֡������ */
+			CCD_Lost = 1;   /* 沿不配对 / 线宽离谱 / 局部对比度不够 = 本帧不作数 */
 		}
 	}
 	else
 	{
-		CCD_Lost = 1;       /* CCD_Zhongzhi ά����һ֡��ֵ��������ͻȻ������ */
+		CCD_Lost = 1;       /* CCD_Zhongzhi 维持上一帧的值，不至于突然打满舵 */
 	}
 
-	if (myabs((int)CCD_Zhongzhi - (int)Last_CCD_Zhongzhi) > 70)   /* ����̫�� */
-		CCD_Zhongzhi = Last_CCD_Zhongzhi;                        /* ��ȡ��һ�ε�ֵ */
+	if (myabs((int)CCD_Zhongzhi - (int)Last_CCD_Zhongzhi) > 70)   /* 跳变太大 */
+		CCD_Zhongzhi = Last_CCD_Zhongzhi;                        /* 就取上一次的值 */
 
 	Last_CCD_Zhongzhi = CCD_Zhongzhi;
 }
 
-/* ���ݾɵ��ã������� main.c ԭ��ֱ�ӵ� get_CCD() */
+/* 兼容旧调用：本工程 main.c 原来直接调 get_CCD() */
 void get_CCD(void)
 {
 	RD_TSL();
@@ -263,11 +278,11 @@ int myabs(int a)
 }
 
 /* ============================================================================
- * ��λ��ͨ�ţ��� ccd_adc[] ��֡�� SciBuf[]���ٰ�Э�鷢��ȥ��
- * Э�飺* LD 00000000 <128 �ֽ� x 2 λʮ������> 00 #
+ * 上位机通信：把 ccd_adc[] 组帧进 SciBuf[]，再按协议发出去。
+ * 协议：* LD 00000000 <128 字节 x 2 位十六进制> 00 #
  * ==========================================================================*/
 
-/* ��֡���ο��� slove_data ȥ����ͷ�Ǵ� RD_TSL�� */
+/* 组帧（参考的 slove_data 去掉开头那次 RD_TSL） */
 static void PackSciBuf(void)
 {
 	int i;
@@ -283,7 +298,7 @@ static void PackSciBuf(void)
 
 void slove_data(void)
 {
-	RD_TSL();          /* ��ο�һ�£���֡ǰ�Ȳ�һ֡ */
+	RD_TSL();          /* 与参考一致：组帧前先采一帧 */
 	PackSciBuf();
 }
 
@@ -294,16 +309,16 @@ void sendToPc(void)
 	printf("*");
 	printf("LD");
 	for (i = 2; i < 134; i++) {
-		printf("%c", binToHex_high(SciBuf[i]));   /* �� 4 λ��Ӧ��ʮ�������ַ� */
-		printf("%c", binToHex_low(SciBuf[i]));    /* �� 4 λ��Ӧ��ʮ�������ַ� */
+		printf("%c", binToHex_high(SciBuf[i]));   /* 高 4 位对应的十六进制字符 */
+		printf("%c", binToHex_low(SciBuf[i]));    /* 低 4 位对应的十六进制字符 */
 	}
-	printf("00");     /* ͨ��Э��Ҫ�� */
-	printf("#");      /* ͨ��Э��Ҫ�� */
+	printf("00");     /* 通信协议要求 */
+	printf("#");      /* 通信协议要求 */
 }
 
-/* ֻ��֡�������²ɼ������ TIM3 ��ʱ�ɼ��ã�������ж����ֲ�һ�顣
- * �ֽ����� sendToPc() ��ȫһ�£����ĳ�һ�� HAL_UART_Transmit��
- * �ο��ǰ��� 270 ������ printf��ÿ�ζ��� fputc ���һ���ֽڷ��ꡣ */
+/* 只发帧、不重新采集。配合 TIM3 定时采集用，免得在中断里又采一遍。
+ * 字节流与 sendToPc() 完全一致，但改成一次 HAL_UART_Transmit：
+ * 参考那版是 270 次阻塞 printf，每次都在 fputc 里等一个字节发完。 */
 void CCD_SendFrame(void)
 {
 	static uint8_t tx[270];
@@ -344,7 +359,7 @@ char binToHex_low(uint8_t num)
 	else if (low_four == 13) return('D');
 	else if (low_four == 14) return('E');
 	else if (low_four == 15) return('F');
-	return('0');        /* �ο�����û�ж��� return����һ����ñ�������"��������·�����з���ֵ" */
+	return('0');        /* 参考这里没有兜底 return，补一个免得编译器报"并非所有路径都有返回值" */
 }
 
 char binToHex_high(uint8_t num)
@@ -371,33 +386,33 @@ char binToHex_high(uint8_t num)
 }
 
 /* ============================================================================
- * �Զ��ع�
+ * 自动曝光
  * ============================================================================
- * �ع�ʱ�� = ���� SI ����ļ�� = CCD_Div x TIM3 ����(10ms)
- * ÿ֡�����ͳ���������أ�
- *   ���� CCD_TARGET_LO -> ���ع⣨̫����
- *   ���� CCD_TARGET_HI -> ���ع⣨̫�����챥���ˣ�
- *   ������ֵ֮�����������������ٽ�㷴��������
- * ��ĳ֡���ù̶��ع⣬������ CCD_AutoExposure() ���ɡ�
+ * 曝光时间 = 两次 SI 脉冲的间隔 = CCD_Div x TIM3 周期(10ms)
+ * 每帧采完后统计最亮像素：
+ *   低于 CCD_TARGET_LO -> 加曝光（太暗）
+ *   高于 CCD_TARGET_HI -> 减曝光（太亮，快饱和了）
+ *   两个阈值之间是死区，避免在临界点反复抖动。
+ * 若某帧想用固定曝光，不调用 CCD_AutoExposure() 即可。
  *
- * ע�⣺����ͳ�Ƶ��� ccd_raw[] �� 12 λԭֵ���� 8 λ�� ccd_adc[] ���о�̫�� ����
- * һ������̨�׾��� 16 LSB������������������̨�ס�
+ * 注意：这里统计的是 ccd_raw[] 的 12 位原值。用 8 位的 ccd_adc[] 当判据太粗 ——
+ * 一个量化台阶就是 16 LSB，整个死区才两三个台阶。
  * ==========================================================================*/
-/* ��ǰ�̶��ع� = 2 x 10ms = 20ms��CCD_AutoExposure() Ŀǰû���κε��õ�
- * ��ֻ������ ccd.h��main.c �ﲻ�������������ֵ����ʵ���ع⡣
- * TSL1401CL �����ֲ� t_int �Ƽ���Χ 0.03375~100ms��
- * 2026-10-24 �� 4(40ms) �� 2(20ms)��40ms �ع��� 0.3 ת/��(Լ 6cm/s)����
- * Լ 2.4mm ��Ӱ�����߶Աȶȱ�̯����TrackLineSeen ���� -> ����ͣͣ��
- * �����ع����Ӱѹ��Լ 1.2mm�������ǽ��������룬��ÿ֡ max/min ����Ӧ��ֵ���� */
+/* 当前固定曝光 = 2 x 10ms = 20ms。CCD_AutoExposure() 目前没有任何调用点
+ * （只声明在 ccd.h，main.c 里不调），所以这个值就是实际曝光。
+ * TSL1401CL 数据手册 t_int 推荐范围 0.03375~100ms。
+ * 2026-10-24 由 4(40ms) 改 2(20ms)：40ms 曝光下 0.3 转/秒(约 6cm/s)就有
+ * 约 2.4mm 拖影，黑线对比度被摊薄，TrackLineSeen 闪断 -> 走走停停；
+ * 减半曝光把拖影压到约 1.2mm，代价是进光量减半，靠每帧 max/min 自适应阈值扛。 */
 volatile uint16_t CCD_Div = 2;              /* 2 x 10ms = 20ms */
 
-#define CCD_DIV_MIN     1                   /*  1 x 10ms =  10ms ���� ����ع� */
-#define CCD_DIV_MAX     10                  /* 10 x 10ms = 100ms ���� �ֲ� t_int ���ޡ�
-                                             * ԭ��д 60��=600ms�������ֲ����޵� 6
-                                             * �������ڳ�������С��Զ��ع�û����
-                                             * ʱ���������룬��һ�����þͻ�һ·��
-                                             * �� 600ms ����ͼ���غ����ȷ�ס�� */
-#define CCD_FULL_SCALE  4095                /* 12 λ������ */
+#define CCD_DIV_MIN     1                   /*  1 x 10ms =  10ms —— 最短曝光 */
+#define CCD_DIV_MAX     10                  /* 10 x 10ms = 100ms —— 手册 t_int 上限。
+                                             * 原来写 60（=600ms），是手册上限的 6
+                                             * 倍，属于超规格运行。自动曝光没启用
+                                             * 时它是死代码，但一旦启用就会一路顶
+                                             * 到 600ms 并把图像曝糊，先封住。 */
+#define CCD_FULL_SCALE  4095                /* 12 位满量程 */
 #define CCD_TARGET_LO   (CCD_FULL_SCALE * 62 / 100)   /* 4095 -> 2538 */
 #define CCD_TARGET_HI   (CCD_FULL_SCALE * 92 / 100)   /* 4095 -> 3767 */
 
@@ -411,16 +426,16 @@ void CCD_AutoExposure(void)
 		if (ccd_raw[i] > mx) mx = ccd_raw[i];
 	}
 
-	if (mx < CCD_TARGET_LO)                 /* ̫�������ع� */
+	if (mx < CCD_TARGET_LO)                 /* 太暗，加曝光 */
 	{
-		step = (mx < CCD_TARGET_LO / 3) ? 4 : 1;   /* ��ö�ʹ󲽿�� */
+		step = (mx < CCD_TARGET_LO / 3) ? 4 : 1;   /* 差得多就大步快调 */
 		if ((uint32_t)CCD_Div + step > CCD_DIV_MAX) CCD_Div = CCD_DIV_MAX;
 		else                                        CCD_Div += step;
 	}
-	else if (mx > CCD_TARGET_HI)            /* ̫�������ع� */
+	else if (mx > CCD_TARGET_HI)            /* 太亮，减曝光 */
 	{
 		if (CCD_Div > CCD_DIV_MIN + 1) CCD_Div -= 1;
 		else                           CCD_Div  = CCD_DIV_MIN;
 	}
-	/* ���������� -> CCD_Div ���ֲ��� */
+	/* 落在死区内 -> CCD_Div 保持不动 */
 }
