@@ -5,9 +5,10 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
-# 7 channels, format is  "[plot:%f,%f,%d,%d,%d,%f,%f\n]"  (note: \n sits BEFORE the ']' in firmware)
-# ch1..7 = TurnTargetRamp, DifSpeedFilter(Actual1), LeftPWM, RightPWM, DifPWM, Angle, Yaw
-$RX = '\[plot:(-?[0-9.]+),(-?[0-9.]+),(-?\d+),(-?\d+),(-?\d+),(-?[0-9.]+),(-?[0-9.]+)'
+# 12 channels (2026-10-31), tab-separated groups, "[plot:...]" with \n BEFORE ']'
+# ch1..12 = TurnPID.Target, TurnPID.Actual1(DifSpeedFilter), LeftPWM, RightPWM,
+#           DifPWM, AvePWM, Angle, Yaw, RightSpeed, LeftSpeed, GX, SpeedPID.Target
+$RX = '\[plot:(-?[0-9.eE+]+),(-?[0-9.eE+]+),\s*(-?\d+),(-?\d+),\s*(-?\d+),(-?\d+),\s*(-?[0-9.eE+]+),(-?[0-9.eE+]+),(-?[0-9.eE+]+),(-?[0-9.eE+]+),(-?\d+),(-?[0-9.eE+]+)'
 
 function Get-Stats($vals) {
     $m = $vals | Measure-Object -Minimum -Maximum -Average
@@ -45,13 +46,14 @@ Set-Content -Path $Out -Value $txt -Encoding ASCII -NoNewline
 $m = [regex]::Matches($txt, $RX)
 if ($m.Count -eq 0) { 'NO FRAMES PARSED. bytes={0}' -f $txt.Length; '--- head ---'; $txt.Substring(0, [Math]::Min(200, $txt.Length)); exit 1 }
 
-$Tgt = $m | ForEach-Object { [double]$_.Groups[1].Value }   # TurnTargetRamp
+$Tgt = $m | ForEach-Object { [double]$_.Groups[1].Value }   # TurnPID.Target
 $Act = $m | ForEach-Object { [double]$_.Groups[2].Value }   # DifSpeedFilter
 $L   = $m | ForEach-Object { [int]  $_.Groups[3].Value }
 $R   = $m | ForEach-Object { [int]  $_.Groups[4].Value }
 $Dif = $m | ForEach-Object { [int]  $_.Groups[5].Value }
-$Ang = $m | ForEach-Object { [double]$_.Groups[6].Value }
-$Yaw = $m | ForEach-Object { [double]$_.Groups[7].Value }
+$Ang = $m | ForEach-Object { [double]$_.Groups[6].Value }   # Angle (channel 7)
+$Yaw = $m | ForEach-Object { [double]$_.Groups[8].Value }   # Yaw  (channel 8)
+$SpdTgt = $m | ForEach-Object { [double]$_.Groups[12].Value } # SpeedPID.Target (channel 12, 2026-10-31)
 
 $sT = Get-Stats $Tgt; $sA = Get-Stats $Act; $sD = Get-Stats $Dif; $sG = Get-Stats $Ang
 

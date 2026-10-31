@@ -243,10 +243,10 @@ PID_t SpeedPID =  					// 速度环：输入 AveSpeed(转/秒)，输出 AnglePID
     .Kd = 0,						// 微分系数
 
     .OutMax = 4,					// 输出限幅(度)：倾角权限=加/减速度权限。2026-10-31 由 2/-3 恢复：
-                                    //   2° 对应 g·sin2°≈0.34m/s²，刹 1 转/秒(0.2m/s)要 0.6s 且中途积分
+     .OutMin = -4,                 //   2° 对应 g·sin2°≈0.34m/s²，刹 1 转/秒(0.2m/s)要 0.6s 且中途积分
                                     //   就饱和，车速在 ±1 转/秒来回荡 —— 实测"停不住"(串口 10-31 数据)。
                                     //   4° 约给 0.68m/s²，兼顾刹车力度与"大幅前后倾"的顾虑。
-    .OutMin = -4,
+    
 
 	.ErrorIntMax = 20,				// 积分限幅：= OutMax/Ki(0.21)≈19 取整。低于它积分永远打不满
 	.ErrorIntMin = -20,				//   输出限幅，刹车/加速都到不了权限边缘(10-31 数据实测停不住的成因之一)
@@ -505,8 +505,8 @@ int main(void)
         Blue_ProcessPackets();
 
         /* ---------- 上位机链路：蓝牙调试口（可选）---------*/
-        len = sprintf(display_buf, "[plot:%f,%f,\t%d,%d,\t%d,%d,\t%f,%f,%.6f,%.6f,%d\n]",
-TurnPID.Target,TurnPID.Actual1,LeftPWM,RightPWM,DifPWM,AvePWM,Angle,Yaw,RightSpeed,LeftSpeed,GX);//GX,GZ,%dGZ,Yaw,DifSpeed,DifPWM,Angle
+        len = sprintf(display_buf, "[plot:%f,%f,\t%d,%d,\t%d,%d,\t%f,%f,%.6f,%.6f,%d,%f\n]",
+TurnPID.Target,TurnPID.Actual1,LeftPWM,RightPWM,DifPWM,AvePWM,Angle,Yaw,RightSpeed,LeftSpeed,GX,SpeedPID.Target);//2026-10-31 加第12列 SpeedPID.Target：诊断"刹不住"必须直视刹车指令的真实值(之前只能靠PWM反推)
 //        len = sprintf(display_buf, "[plot:%f,%f,%f,%.2f,%d,%d,%d,%d,%d,%d,%d,%d\n]",AveSpeed, SpeedPID.Target, SpeedPID.Out, Angle,
 //darkCnt, TrackLineSeen, CCD_Lost, CCD_Width, CCD_Zhongzhi,LeftPWM,RightPWM,AvePWM);//,TurnPID.Target,TurnPID.Actual1,DifPWM,AngleGX,GZ,%dGZ,DifSpeed,DifPWM,Angle
         HAL_UART_Transmit(&huart3, (uint8_t *)display_buf, (uint16_t)len, 100);
