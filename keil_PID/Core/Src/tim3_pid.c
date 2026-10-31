@@ -92,6 +92,89 @@
  * 所以两处都引用这个宏，不要再写字面量 10。 */
 #define PITCH_GX_TRIM   10
 
+/* ==========================================================================
+ * ★ 角度融合三选一：编译期宏切换，运行无额外开销
+ *
+ *   0 = 原有互补滤波(Alpha=0.001)：原行为，逐字节保留，出问题可一键退回
+ *   1 = 两状态卡尔曼（移植自 WHEELTEC MiniBalance/filter.c 的 Kalman_Filter_x）
+ *       状态 = [角度, 陀螺零偏]，零偏在线估计 -> 温漂自己吃掉，
+ *       此模式下 **PitchBiasDps 与 PITCH_GX_TRIM 的含义被零偏状态取代**，
+ *       不要再手填（常数会被吸收进零偏状态，填了也不会错，但没必要）。
+ *   2 = 参考参数的互补（K1=0.02）：比模式 0 快约 20 倍，
+ *       但零偏仍依赖 PitchBiasDps，温漂照旧。
+ *
+ * dt 说明：参考实现跑 5ms，本回调是 10ms，所以 KALMAN_DT / COMP_DT 都取 0.01。
+ *   实测（同一套 Q/R 递推稳态解）：
+ *     dt=0.005 -> K0=0.0080, 角度 tau≈0.63s
+ *     dt=0.010 -> K0=0.0131, 角度 tau≈0.76s   <- 只慢 22%，卡尔曼增益会自适应抬高
+ *   对比模式 0 的 tau=dt/Alpha=10s，模式 1 快约 13 倍。
+ * ==========================================================================*/
+#define ANGLE_FUSE_MODE   0     /* 0/1/2，见上表 */
+#define KALMAN_DT         0.01f
+#define KALMAN_Q_ANGLE    0.001f
+#define KALMAN_Q_GYRO     0.003f
+#define KALMAN_R_ANGLE    0.5f
+#define COMP_DT           0.01f
+#define COMP_K1_FAST      0.02f
+
+#if ANGLE_FUSE_MODE == 1
+/* 两状态卡尔曼。符号约定与模式 0 完全一致：
+ *   调用方传进来的 accel 已经是 -atan2(AY,AZ)+G，gyro 传 -GX/16.384，
+ *   这样内部积分方向与 AngleGyro 的"减"一致，不需要在返回后翻号。 */
+static float KA_angle = 0.0f, KA_bias = 0.0f;
+static float KA_P00 = 1.0f, KA_P01 = 0.0f, KA_P10 = 0.0f, KA_P11 = 1.0f;
+
+static void AngleKalman_Reset(float a)
+{
+    KA_angle = a;
+    KA_bias  = 0.0f;
+    KA_P00 = 1.0f; KA_P01 = 0.0f;
+    KA_P10 = 0.0f; KA_P11 = 1.0f;
+}
+
+static float AngleKalman_Update(float accel, float gyro)
+{
+    float pd0, pc0, pc1, e, k0, k1, t0, t1, err;
+
+    KA_angle += (gyro - KA_bias) * KALMAN_DT;      /* 先验估计 */
+
+    pd0 = KALMAN_Q_ANGLE - KA_P01 - KA_P10;
+    KA_P00 += pd0 * KALMAN_DT;
+    KA_P01 += (-KA_P11) * KALMAN_DT;
+    KA_P10 += (-KA_P11) * KALMAN_DT;
+    KA_P11 += KALMAN_Q_GYRO * KALMAN_DT;
+
+    err = accel - KA_angle;                        /* 新息 */
+    pc0 = KA_P00;
+    pc1 = KA_P10;
+    e   = KALMAN_R_ANGLE + pc0;
+    k0  = pc0 / e;
+    k1  = pc1 / e;
+    t0  = pc0;
+    t1  = KA_P01;
+    KA_P00 -= k0 * t0;
+    KA_P01 -= k0 * t1;
+    KA_P10 -= k1 * t0;
+    KA_P11 -= k1 * t1;
+
+    KA_angle += k0 * err;
+    KA_bias  += k1 * err;
+    return KA_angle;
+}
+#endif
+
+#if ANGLE_FUSE_MODE == 2
+static float CA_angle = 0.0f;
+static void AngleComp_Reset(float a) { CA_angle = a; }
+static float AngleComp_Update(float accel_m, float gyro_m)
+{
+    /* 与模式 0 同号：角度减去角速度积分；零偏仍用 PitchBiasDps */
+    CA_angle = COMP_K1_FAST * accel_m
+             + (1.0f - COMP_K1_FAST) * (CA_angle - (gyro_m - PitchBiasDps) * COMP_DT);
+    return CA_angle;
+}
+#endif
+
 /* ---- 静止自校准(ZUPT)：把"上电标一次、之后永远不变"的零偏改成在线跟踪 ----
  * 为什么必须做：MPU6050 数据手册 ZRO 温度系数 ±0.24 (°/s)/°C。
  *   电机跑热 10 °C → 零偏移 ±2.4 °/s，比 YAW_BIAS_DPS 那 0.10 °/s
@@ -298,6 +381,12 @@ void Angle_Realign(void)
 
     Angle = (float)sum / 30.0f + G;       /* 取平均并叠加安装偏置 */
 
+#if ANGLE_FUSE_MODE == 1
+    AngleKalman_Reset(Angle);             /* 起立/上电对准后把滤波器状态也重锁到这个真值 */
+#elif ANGLE_FUSE_MODE == 2
+    AngleComp_Reset(Angle);
+#endif
+
 #if PITCH_BIAS_ENABLE
     /* 同一批静止采样顺手标定 X 轴零偏(°/s)。
      * 与 Angle 共用一个 300ms 窗口：Realign 本来就只允许静止时调用，
@@ -397,6 +486,7 @@ static void Tick10_Attitude(void)
          *   时间常数 = 1/(Alpha*100Hz) = 10s，即 10s 内相信陀螺仪，10s 外拉回加速度计
          * 这里的 Gyro 分支是"用上一拍 Angle 减去角速度积分"的写法，
          *   dt 直接写 0.01，因为本回调就是 10ms 一拍。 */
+#if ANGLE_FUSE_MODE == 0
 #if PITCH_BIAS_ENABLE
         /* 先扣 X 轴零偏再积分(零偏来源/标定时机/为什么必须是 999 倍放大见 PITCH_BIAS_* 宏注释)。
          *   (GX/16.384 - b) * 0.01  ==  GX*(0.01/16.384) - b*0.01
@@ -408,6 +498,14 @@ static void Tick10_Attitude(void)
 #endif
         float Alpha = 0.001f;
         Angle = Alpha * AngleAcc + (1 - Alpha) * AngleGyro;
+#elif ANGLE_FUSE_MODE == 1
+        /* 卡尔曼：零偏由滤波器内部状态在线估计，这里**不再**减 PitchBiasDps（否则重复补偿）。
+         * 陀螺传负号，保持"GX 增大 -> Angle 减小"的原有符号约定。 */
+        Angle = AngleKalman_Update(AngleAcc, -(float)GX * (1.0f / GYRO_LSB_PER_DPS));
+#else
+        /* 参考参数的快速互补(K1=0.02)：零偏仍靠 PitchBiasDps，符号同模式 0 */
+        Angle = AngleComp_Update(AngleAcc, (float)GX * (1.0f / GYRO_LSB_PER_DPS));
+#endif
 
         /* ---------- 大偏差快速重同步：摔车/提起后"假角锁死"的解药 ----------
          * Alpha=0.001 的互补滤波对大角度偏差的拉回速率只有约 10°/s：
@@ -427,6 +525,11 @@ static void Tick10_Attitude(void)
                 if (angResyncCnt >= 10)
                 {
                     Angle = AngleAcc;      /* 姿态失锁：直接采信加速度计 */
+#if ANGLE_FUSE_MODE == 1
+                    AngleKalman_Reset(AngleAcc);  /* 滤波器内部状态一并重锁，否则它会把假角慢慢拉回来 */
+#elif ANGLE_FUSE_MODE == 2
+                    AngleComp_Reset(AngleAcc);
+#endif
                     angResyncCnt = 0;
                 }
             }
