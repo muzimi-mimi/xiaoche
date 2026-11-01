@@ -174,8 +174,18 @@ float    ZuptSq  = 0.0f;     /* ZUPT 窗口内角速度残差平方和 */
 int16_t LeftPWM, RightPWM;			// 左 PWM、右 PWM
 int16_t AvePWM, DifPWM;				// 平衡 PWM、差速 PWM
 volatile int16_t TestPWM = 0;		// 开环测试 PWM：仅在 ST_IDLE 生效，0=关闭；由 [slider,TestPWM,值] 写入（见 car.h）
-volatile int16_t InnerLockMode = 1;	// 内轮强制不转(方案三)：0=关 1=只钳弱反转段 2=内轮钳0；[slider,InnerLock,值] 在线切
-									// 默认 0：模式2 在直角转弯里会破坏 (L+R)/2==AvePWM，实测摔车，见 Ccd_Frame.h 的 INNER_LOCK_MAX_AVE
+
+
+
+
+volatile int16_t InnerLockMode = 2;	// 内轮强制不转(方案三)：0=关 1=只钳弱反转段 2=内轮钳0；[slider,InnerLock,值] 在线切
+									// 2026-11-01 实测模式2 可用，故默认取 2。10-28 那次"模式2 摔车"发生在
+									// INNER_LOCK_MAX_AVE(10) 门限加入之前：钳内轮会破坏 (L+R)/2==AvePWM，
+									// 门限在 |AvePWM|>=10 时放开内轮，该摔车条件已不成立。见 Ccd_Frame.h:56
+
+
+
+
 float DifSpeedFilter = 0.0f;		// 转向角速度的一阶低通滤波值，抑制编码器量化噪声
 float TurnTargetCmd  = 0.0f;		// 转向目标命令值：摇杆/循迹/直角各支路都写这里（期望值）
 float TurnTargetRamp = 0.0f;		// 转向目标斜坡值：每 50ms 向 Cmd 限速逼近，实际喂给 TurnPID.Target
@@ -228,9 +238,9 @@ float BatVoltage = 0.0f;            /* 电池电压(V)：8 次平均 + IIR 平�
  *      所以 Target 突变不会产生微分冲击 */
 PID_t AnglePID =  					// 角度环：输入 Angle，输出 AvePWM（直立控制）
 {
-    .Kp = 14.6,						// 比例系数
+    .Kp = 16.9,						// 比例系数
     .Ki = 0.06,						// 积分系数
-    .Kd = 10.0,						// 微分系数
+    .Kd = 30.4,						// 微分系数
 
     .OutMax = 80,					// 输出限幅 -> 最大 PWM 80
     .OutMin = -80,					// 输出限幅
@@ -247,14 +257,11 @@ PID_t SpeedPID =  					// 速度环：输入 AveSpeed(转/秒)，输出 AnglePID
     .Ki = 0.21,						// 积分系数
     .Kd = 0,						// 微分系数
 
-    .OutMax = 4,					// 输出限幅(度)：倾角权限=加/减速度权限。2026-10-31 由 2/-3 恢复：
-     .OutMin = -4,                 //   2° 对应 g·sin2°≈0.34m/s²，刹 1 转/秒(0.2m/s)要 0.6s 且中途积分
-                                    //   就饱和，车速在 ±1 转/秒来回荡 —— 实测"停不住"(串口 10-31 数据)。
-                                    //   4° 约给 0.68m/s²，兼顾刹车力度与"大幅前后倾"的顾虑。
-    
-
-	.ErrorIntMax = 20,				// 积分限幅：= OutMax/Ki(0.21)≈19 取整。低于它积分永远打不满
-	.ErrorIntMin = -20,				//   输出限幅，刹车/加速都到不了权限边缘(10-31 数据实测停不住的成因之一)
+    .OutMax = 5,					// 输出限幅 5 度：太大车会大幅前后倾，5 度约合 10 个脉冲
+    .OutMin = -5,					
+	
+	.ErrorIntMax = 10,				// 积分限幅
+	.ErrorIntMin = -15,			// 积分限幅
 
 };
 PID_t TurnPID =  					// 转向环：输入差速，输出 DifPWM
@@ -511,7 +518,7 @@ int main(void)
 
         /* ---------- 上位机链路：蓝牙调试口（可选）---------*/
         len = sprintf(display_buf, "[plot:%f,%f,\t%d,%d,\t%d,%d,\t%f,%f,%.6f,%.6f,%d,%f\n]",
-TurnPID.Target,TurnPID.Actual1,LeftPWM,RightPWM,DifPWM,AvePWM,Angle,Yaw,RightSpeed,LeftSpeed,GX,SpeedPID.Target);//2026-10-31 加第12列 SpeedPID.Target：诊断"刹不住"必须直视刹车指令的真实值(之前只能靠PWM反推)
+TurnPID.Target,TurnPID.Actual1,LeftPWM,RightPWM,DifPWM,AvePWM,Angle,Yaw,RightSpeed,LeftSpeed,GX,SpeedPID.Target);//第12列 SpeedPID.Target：区分"有人在命令前进"与"外环符号反"——前者第12列跟着速度涨，后者恒为0
 //        len = sprintf(display_buf, "[plot:%f,%f,%f,%.2f,%d,%d,%d,%d,%d,%d,%d,%d\n]",AveSpeed, SpeedPID.Target, SpeedPID.Out, Angle,
 //darkCnt, TrackLineSeen, CCD_Lost, CCD_Width, CCD_Zhongzhi,LeftPWM,RightPWM,AvePWM);//,TurnPID.Target,TurnPID.Actual1,DifPWM,AngleGX,GZ,%dGZ,DifSpeed,DifPWM,Angle
         HAL_UART_Transmit(&huart3, (uint8_t *)display_buf, (uint16_t)len, 100);

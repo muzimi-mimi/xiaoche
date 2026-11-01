@@ -14,7 +14,7 @@
 
 #include "main.h"
 
-#define TRACK_SPEED    0.1f    /* 循迹前进速度（转/秒）：写进 SpeedTargetCmd，再经 SPEED_SLEW
+#define TRACK_SPEED    0.35f    /* 循迹前进速度（转/秒）：写进 SpeedTargetCmd，再经 SPEED_SLEW
                                  *   斜坡后才落到 SpeedPID.Target
                                  *   摇杆那一支只在 !TrackMode 时才动速度目标，
                                  *   循迹模式下没有速度输入，目标值由这里统一给

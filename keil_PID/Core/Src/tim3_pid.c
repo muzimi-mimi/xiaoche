@@ -113,7 +113,7 @@
 #define KALMAN_DT         0.01f
 #define KALMAN_Q_ANGLE    0.001f
 #define KALMAN_Q_GYRO     0.003f
-#define KALMAN_R_ANGLE    0.5f
+#define KALMAN_R_ANGLE    20.0f
 #define COMP_DT           0.01f
 #define COMP_K1_FAST      0.02f
 
@@ -264,21 +264,21 @@ static float AngleComp_Update(float accel_m, float gyro_m)
                               *   +1 会正反馈跑飞、越转越快直到翻车，必须 -1。 */
 
 /* ===== 自起立(Self-Erect)参数 ===== */
-#define ERECT_PWM        85		/* 甩轮 PWM(0~100)：太大车轮打滑，太小甩不起来。
+#define ERECT_PWM        75		/* 甩轮 PWM(0~100)：太大车轮打滑，太小甩不起来。
                                  * 2026-10-31 对照 keil_PID - 副本(那份能正常起立)：它是 100。
                                  * 现由 55 提到 85 —— 先保证"能甩起来"，过猛再一档一档降(每次 10)。 */
-#define ERECT_START_ANG  30.0f	/* 平衡中断阈值：|Angle| 超过它就判定摔倒，直接停车。
+#define ERECT_START_ANG  35.0f	/* 平衡中断阈值：|Angle| 超过它就判定摔倒，直接停车。
                                  * 前后任一方向超过 30° 就 StopCar。
                                  * 必须大于 ERECT_DONE_ANG_BACK(25)：后仰起立收到 25° 就切
                                  * 平衡环，摔倒阈值必须比它高，否则刚起立就会被误判成摔车。
                                  * 只剩 5° 余量：若正常行驶中偶尔误停，说明车身瞬态超过 30°
                                  * (硬加速/磕碰)，那时再回调到 35~40。 */
-#define ERECT_DONE_ANG   25.0f	/* 前倾起立：|Angle| 收到这个角度内就切平衡环。
+#define ERECT_DONE_ANG   30.0f	/* 前倾起立：|Angle| 收到这个角度内就切平衡环。
                                  * ★ 必须明显小于"躺姿时的 |Angle|"(实测约 36°)，否则
                                  *   一按"1"当拍就满足 ≤doneAng，甩轮段(swing)一次都不执行，
                                  *   直接交给平衡环 -> 用 38° 误差满力把车"抡"起来。
                                  *   副本用 30，这里取 25：既够早交接，又与 30° 摔倒线留 5° 余量。 */
-#define ERECT_DONE_ANG_BACK 25.0f /* 后仰起立：抬到 25° 就切平衡环。
+#define ERECT_DONE_ANG_BACK 30.0f /* 后仰起立：抬到 25° 就切平衡环。
                                  * 不能取 35 —— 那样会超过 30° 摔倒线，交接当拍就被 StopCar。 */
 #define ERECT_TIMEOUT_MS 3000	/* 甩轮超时：3 秒还没起来就停车（电池太弱 / 卡住） */
 #define ERECT_SWITCH_GX_MAX 120.0f	/* 切平衡环的角速度门槛(°/s)：只看角度不看速度的交接必摔——
