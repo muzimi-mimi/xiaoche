@@ -109,7 +109,7 @@
  *     dt=0.010 -> K0=0.0131, 角度 tau≈0.76s   <- 只慢 22%，卡尔曼增益会自适应抬高
  *   对比模式 0 的 tau=dt/Alpha=10s，模式 1 快约 13 倍。
  * ==========================================================================*/
-#define ANGLE_FUSE_MODE   0     /* 0/1/2，见上表 */
+#define ANGLE_FUSE_MODE   1     /* 0/1/2，见上表 */
 #define KALMAN_DT         0.01f
 #define KALMAN_Q_ANGLE    0.001f
 #define KALMAN_Q_GYRO     0.003f
@@ -264,18 +264,34 @@ static float AngleComp_Update(float accel_m, float gyro_m)
                               *   +1 会正反馈跑飞、越转越快直到翻车，必须 -1。 */
 
 /* ===== 自起立(Self-Erect)参数 ===== */
-#define ERECT_PWM        100		/* 甩轮 PWM(0~100)：太大车轮打滑，太小甩不起来 */
-#define ERECT_START_ANG  50.0f	/* 平衡中断阈值：|Angle| 超过它就判定摔倒，直接停车。
-                                 * 必须大于 ERECT_DONE_ANG_BACK(45)：后仰起立收到 45° 就切
-                                 * 平衡环，阈值再低(<45)会把刚起立的车立刻误判成摔车。
-                                 * 2026-10-31 由 55 收紧到 50：配合大偏差快速重同步，
-                                 * 摔车/提起后 Angle 1 秒内重锁真值，这条保护才真正生效。 */
-#define ERECT_DONE_ANG   30.0f	/* 前倾起立：|Angle| 收到这个角度内就切平衡环 */
-#define ERECT_DONE_ANG_BACK 45.0f	/* 后仰起立：抬到 45 度左右就切平衡环，防止冲过头 */
+#define ERECT_PWM        85		/* 甩轮 PWM(0~100)：太大车轮打滑，太小甩不起来。
+                                 * 2026-10-31 对照 keil_PID - 副本(那份能正常起立)：它是 100。
+                                 * 现由 55 提到 85 —— 先保证"能甩起来"，过猛再一档一档降(每次 10)。 */
+#define ERECT_START_ANG  30.0f	/* 平衡中断阈值：|Angle| 超过它就判定摔倒，直接停车。
+                                 * 前后任一方向超过 30° 就 StopCar。
+                                 * 必须大于 ERECT_DONE_ANG_BACK(25)：后仰起立收到 25° 就切
+                                 * 平衡环，摔倒阈值必须比它高，否则刚起立就会被误判成摔车。
+                                 * 只剩 5° 余量：若正常行驶中偶尔误停，说明车身瞬态超过 30°
+                                 * (硬加速/磕碰)，那时再回调到 35~40。 */
+#define ERECT_DONE_ANG   25.0f	/* 前倾起立：|Angle| 收到这个角度内就切平衡环。
+                                 * ★ 必须明显小于"躺姿时的 |Angle|"(实测约 36°)，否则
+                                 *   一按"1"当拍就满足 ≤doneAng，甩轮段(swing)一次都不执行，
+                                 *   直接交给平衡环 -> 用 38° 误差满力把车"抡"起来。
+                                 *   副本用 30，这里取 25：既够早交接，又与 30° 摔倒线留 5° 余量。 */
+#define ERECT_DONE_ANG_BACK 25.0f /* 后仰起立：抬到 25° 就切平衡环。
+                                 * 不能取 35 —— 那样会超过 30° 摔倒线，交接当拍就被 StopCar。 */
 #define ERECT_TIMEOUT_MS 3000	/* 甩轮超时：3 秒还没起来就停车（电池太弱 / 卡住） */
+#define ERECT_SWITCH_GX_MAX 120.0f	/* 切平衡环的角速度门槛(°/s)：只看角度不看速度的交接必摔——
+                                 * 2026-11-01 实测甩轮 0.2s 把车从 -32° 甩进窗(+6°)，进窗瞬间
+                                 * GX≈200~230°/s，平衡环压不住该动量，±80 对打 6 回合发散摔车。
+                                 * 进窗后若 |GX| 仍超门槛：断电滑行阻尼，等角速度自然衰减，
+                                 * 衰减回窗内就交接；滑出窗则按新方向继续甩。3s 超时兜底不变。 */
 /* ERECT_ABORT_GUARD_MS 不在这里：只有 main.c 用它（起立中按键放弃的生效门槛）。 */
 #define ERECT_DIR        (1)		/* 甩轮方向：1 = 与平衡环同号(默认)，-1 = 取反(原地转圈/磨胎时用) */
-#define ERECT_PULSE_MS   400			/* 脉冲模式：每个周期通电多少 ms；0 = 连续通电(一直甩) */
+#define ERECT_PULSE_MS   400		/* 脉冲模式：每个周期通电多少 ms；0 = 连续通电(一直甩)。
+                                 * 2026-10-31 由 500 恢复为 400：与副本一致(通 400 / 断 100)。
+                                 * 500 与 PERIOD 相等时 (ErectTime % 500) >= 500 恒为假，
+                                 * 脉冲逻辑失效 = 连续通电，正是之前"推得动但起不来"的形态。 */
 #define ERECT_PERIOD_MS  500		/* 脉冲周期(ms)：通电 400ms + 断开 100ms */
 
 /* ==========================================================================
@@ -715,10 +731,11 @@ static void Tick10_Attitude(void)
              * 前后用不同的到位角度，因为抬起时重心位置不同，收的角度也不同
              * 起立过程中不做转向：TurnPID.Target 固定 0 */
             float erectDoneAng = (Angle > 0.0f) ? ERECT_DONE_ANG : ERECT_DONE_ANG_BACK;
+            float gxDps = (float)GX * (1.0f / GYRO_LSB_PER_DPS);   /* 进窗动量：交接前必须先安静(见 ERECT_SWITCH_GX_MAX) */
 
-            if (fabsf(Angle) <= erectDoneAng)
+            if (fabsf(Angle) <= erectDoneAng && fabsf(gxDps) < ERECT_SWITCH_GX_MAX)
             {
-                /* 已经进入平衡范围 -> 切平衡环 */
+                /* 已经进入平衡范围且角速度已衰减 -> 切平衡环 */
                 PID_ResetAll();
                 ErectTime = 0;
                 CarState  = ST_BALANCE;
@@ -727,6 +744,11 @@ static void Tick10_Attitude(void)
             {
                 int16_t swing = (Angle > 0.0f) ? ERECT_PWM : -ERECT_PWM;
                 if (ERECT_DIR < 0) swing = -swing;      /* 甩轮方向取反 */
+
+                /* ★ 已进窗但角速度还大：绝不能再加力甩(只会甩过头更远)，
+                 * 断电滑行靠摩擦阻尼衰减；衰减回窗内下一拍就交接，
+                 * 滑出窗则本分支自动回到正常甩轮逻辑(按新 Angle 方向)。 */
+                if (fabsf(Angle) <= erectDoneAng) swing = 0;
 
                 if (ERECT_PULSE_MS > 0 && (ErectTime % ERECT_PERIOD_MS) >= ERECT_PULSE_MS)
                     swing = 0;                          /* 脉冲(断续)模式：只有高电平段才通电，模拟人甩车的节奏 */
