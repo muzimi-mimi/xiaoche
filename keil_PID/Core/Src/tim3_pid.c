@@ -728,8 +728,35 @@ static void Tick10_Attitude(void)
                 && AvePWM >= -INNER_LOCK_MAX_AVE && AvePWM <= INNER_LOCK_MAX_AVE)
             {
                 int16_t *pInner = (DifPWM > 0) ? &RightPWM : &LeftPWM;
+                int      ph     = 0;        /* 内轮锁分段号，偶数=绕内轮，奇数=绕外轮 */
 
-                if (InnerLockMode == 1)
+#if (PIVOT_LOCK_SEGS > 1)
+                /* 每 PIVOT_FIXED_DEG/N 度换一次转轴。YawTurned 进 PIVOT 时由
+                 * Ccd_Frame.c 清零，这里直接当进度用（grep 一下 YawTurned 的三处 =0）。 */
+                {
+                    float seg = PIVOT_FIXED_DEG / (float)(PIVOT_LOCK_SEGS);
+                    if (seg < 1.0f) seg = 1.0f;                     /* 防除零 */
+                    ph = (int)(fabsf(YawTurned) / seg);
+                }
+#endif
+
+                if ((ph & 1) && InnerLockMode == 2
+                    && fabsf((float)AvePWM) < 0.5f * fabsf((float)DifPWM) - 2.0f)
+                {
+                    /* 奇数段换轴：外轮钉 0 当转轴，内轮成唯一驱动轮 —— 但它必须
+                     * ★反向★（与 DifPWM 异号）才转得对：内轮的值是 AvePWM - |Dif|/2，
+                     * 只有 |AvePWM| < |DifPWM|/2 时它才是负的。实测 |AvePWM| 冲到 +28
+                     * 而 |DifPWM|/2 只有 8~10，那一段内轮会被推成正号 -> 车倒着转回来，
+                     * 把上一段转过的角度原样抵掉。
+                     * 所以两道保险：① 上面那个门限——几何不成立就不换轴，留在内轮轴
+                     * （行为退化成原来的单轮锁）；② 仍把驱动轮钳成与 DifPWM 异号。
+                     * 奇数段实发平均 = 驱动/2 <= 0（恒向后推），偶数段恒向前推，
+                     * 两段一推一拉互相抵消，位移才不累积。 */
+                    if (DifPWM > 0) LeftPWM  = 0;
+                    else            RightPWM = 0;
+                    if ((int)*pInner * (int)DifPWM > 0) *pInner = 0;
+                }
+                else if (InnerLockMode == 1)
                 {
                     /* 模式B：只抬弱反转段，深度反转（< -INNER_LOCK_DZ）保留 */
                     if (*pInner < 0 && *pInner >= -INNER_LOCK_DZ) *pInner = 0;

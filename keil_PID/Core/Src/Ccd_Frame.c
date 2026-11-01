@@ -116,14 +116,7 @@
  *   状态机里两条分支都用 #if 保留，不用动别的地方。
  */
 #define PIVOT_USE_CCD_STOP 0
-#define PIVOT_FIXED_DEG    84.0f   /* 固定模式的停转角(度)：90 = 直角 / T 字路口的理论值
-                                    *
-                                    * 会过冲：退出瞬间 TurnTargetCmd 已清 0，但 TurnTargetRamp
-                                    * 仍按 TURN_SLEW=0.2/50ms 往 0 滑，从 0.9 滑到 0 要 225ms，
-                                    * 期间平均 0.45 转/秒差速，约 27°/s，再多转约 6 度。
-                                    * 所以最终朝向要按实测校这个数：转多了减小(如 84)，
-                                    * 转少了加大(如 95)。
-                                    * 标定：跑一次，看 OLED 的 YawTurned 停在哪、车头实际朝哪。 */
+/* PIVOT_FIXED_DEG 已移到 Ccd_Frame.h（内轮锁分段要按它算段长，tim3_pid.c 也要读）。 */
 
 /* ---- 直角转向极性：压黑的那一端 -> 往哪边转 ----
  *
