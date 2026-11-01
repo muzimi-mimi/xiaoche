@@ -159,7 +159,7 @@ TRACK_GAIN          1.2f    Ccd_Frame.c:36
 TRACK_SPEED         0.1f    Ccd_Frame.h:17
 CORNER_SPEED        0.0f    Ccd_Frame.h:111
 PIVOT_TIMEOUT_MS   3000     Ccd_Frame.h:58
-InnerLockMode         1     main.c:177       ← 0=关 1=只钳弱反转段 2=内轮钳0(会把平衡权限腰斩)
+InnerLockMode         2     main.c:181       ← 0=关 1=只钳弱反转段 2=内轮钳0；2026-11-01 实测模式2可用(靠 INNER_LOCK_MAX_AVE=10 在 |AvePWM|>=10 时放开内轮；10-28 摔车发生在此门限加入前)。★ HEAD 仍为 1，2 属工作区未提交改动
 ```
 
 ## 6. 交付定义：改完 ≠ 改对
