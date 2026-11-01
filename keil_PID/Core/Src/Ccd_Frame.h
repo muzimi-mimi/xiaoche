@@ -79,6 +79,16 @@
  *   有效转角时间 = (84/N)/32 秒，换轴开销约 0.1 秒 -> N 超过约 26 就亏本。推荐 4~8。
  *   填 1 = 完全回到"始终锁同一只轮子"的老行为。只作用于 InnerLockMode=2，模式1 不受影响。 */
 #define PIVOT_LOCK_SEGS    4
+/* ★ 内轮锁是否也作用于第四关 NAV 转弯（2026-11-01 新增，默认 1）
+ *   状态4 的 NAV 转弯与 PIVOT 走的是同一条执行链：Ccd_Frame.c:287 和 :300 都是
+ *     TurnTargetCmd = TRACK_DIR * (float)CornerDir * PIVOT_RATE;
+ *   之后共用同一个 TurnPID + TURN_FF。差别只在"停止判据"：
+ *     NAV   : fabsf(YawTurned) >= NAV_TURN_DEG(115°) / 2500ms
+ *     PIVOT : 固定角 PIVOT_FIXED_DEG(84°) / PIVOT_TIMEOUT_MS
+ *   所以原先只写 CornerState == CORNER_PIVOT 的卫语句，会让左直角(被 NAV 接管)
+ *   永远测不到内轮锁和分段 N —— 2026-11-01 实测 151 帧日志就是这种情况。
+ *   填 0 = 内轮锁只作用于 PIVOT，NAV 回到第四关原行为（回退开关）。 */
+#define PIVOT_LOCK_NAV     1
 #define PIVOT_ADVANCE_MS   0        /* 开始累计 Yaw 之前先空走多少 ms
                                      *
                                      * 为什么要留这段：CCD 装在车头前方约 L 厘米处，原地旋转时传感器的轨迹
