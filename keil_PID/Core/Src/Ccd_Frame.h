@@ -53,7 +53,7 @@
  *   再 6 拍 Angle 就从 0 冲到 -54°，触发 ERECT_START_ANG 保护停车。
  * 门限的作用：平衡环几乎不出力（车正立、匀速）时才允许单轮驱动；
  *   一旦它开始抢救，立刻把完整权限还回去。调大更"敢锁"但更容易摔。 */
-#define INNER_LOCK_MAX_AVE  10
+#define INNER_LOCK_MAX_AVE  15      /* 2026-11-01 由 10 调到 15，且门限比较改为含边界 >=/<=（原先严格 >/< 会把 |AvePWM| 恰好为 10 的帧误判成超限）。 */
 
 #define PIVOT_TIMEOUT_MS   3000     /* 转弯超时：转了 3 秒还没等到线(打滑/卡住/丢线)就保底回循迹 */
 #define PIVOT_ADVANCE_MS   0        /* 开始累计 Yaw 之前先空走多少 ms

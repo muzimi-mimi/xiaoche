@@ -705,7 +705,7 @@ static void Tick10_Attitude(void)
              * 放在 ±80 限幅之后：先保证不削顶，再钳内轮，顺序上内轮一定是
              * 最终下发值；串口 [plot:] 的 LeftPWM/RightPWM 两列也就是钳后的值。 */
             if (InnerLockMode != 0 && CornerState == CORNER_PIVOT && DifPWM != 0
-                && AvePWM > -INNER_LOCK_MAX_AVE && AvePWM < INNER_LOCK_MAX_AVE)
+                && AvePWM >= -INNER_LOCK_MAX_AVE && AvePWM <= INNER_LOCK_MAX_AVE)
             {
                 int16_t *pInner = (DifPWM > 0) ? &RightPWM : &LeftPWM;
 

@@ -180,8 +180,8 @@ volatile int16_t TestPWM = 0;		// 开环测试 PWM：仅在 ST_IDLE 生效，0=�
 
 volatile int16_t InnerLockMode = 2;	// 内轮强制不转(方案三)：0=关 1=只钳弱反转段 2=内轮钳0；[slider,InnerLock,值] 在线切
 									// 2026-11-01 实测模式2 可用，故默认取 2。10-28 那次"模式2 摔车"发生在
-									// INNER_LOCK_MAX_AVE(10) 门限加入之前：钳内轮会破坏 (L+R)/2==AvePWM，
-									// 门限在 |AvePWM|>=10 时放开内轮，该摔车条件已不成立。见 Ccd_Frame.h:56
+									// INNER_LOCK_MAX_AVE 门限加入之前：钳内轮会破坏 (L+R)/2==AvePWM，
+									// 门限在 |AvePWM|>15 时放开内轮，该摔车条件已不成立。见 Ccd_Frame.h:56
 
 
 
