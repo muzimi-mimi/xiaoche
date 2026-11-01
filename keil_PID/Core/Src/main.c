@@ -208,14 +208,29 @@ volatile uint8_t CornerState = CORNER_LINE;
 volatile int8_t  CornerDir   = 0;   /* 本次直角的转向：+1 = 右转，-1 = 左转
                                      * 注意这是"转向"符号，不是"图像哪端发黑"：
                                      * Target = TRACK_DIR x CornerDir x PIVOT_RATE，
-                                     * TRACK_DIR = -1，所以 +1 -> Target<0 -> 右转
-                                     * 与 TurnPID / 循迹的符号约定完全一致 */
+                                     * TRACK_DIR = +1（2026-10-30 翻回），所以
+                                     *   +1 -> Target=+0.9 -> 右转
+                                     *   -1 -> Target=-0.9 -> 左转
+                                     * 已由 2026-11-01 的 T 路口日志确认：Target=-0.9 时
+                                     * Yaw 由 -40.8 涨到 +42.9（净 +83.7°），确为左转。
+                                     * 第四关(NAV)进入后本值会被改写成 +1（右转）。 */
 volatile float   YawTurned   = 0.0f;/* 本次转角累计值(度)，进入 PIVOT 时清零 */
 float    YawPrev     = 0.0f;        /* 上一拍的 Yaw，用来算增量 */
 uint16_t PivotTicks  = 0;           /* 转弯计时(ms) */
 uint8_t  CornerSeen  = 0;           /* 连续满足直角条件的帧数 */
 uint8_t  TSeen       = 0;           /* 连续满足 T 字路口条件的帧数 */
 uint8_t  PivotOk     = 0;           /* PIVOT 中连续抓到线的帧数（CCD 接管转弯的判据） */
+
+/* ---- 第四关惯性导航的状态量（CORNER_NAV 期间有意义，见 car.h 的 NAV_PHASE_*）----
+ * NavDist 用 float：800mm 量程下 float 的分辨率远小于 1mm 累积误差，
+ *   里程是"累加"的量，用整数 mm 反而会每拍截断丢掉亚毫米，11 秒下来差出几毫米。 */
+volatile uint8_t NavPhase       = NAV_PHASE_TURN;
+volatile float   NavDist        = 0.0f;
+volatile uint8_t NavStickerCnt  = 0;
+volatile uint8_t NavStickerSeen = 0;
+uint16_t NavTicks   = 0;
+float    NavYawHold = 0.0f;
+volatile uint8_t NavArmed = 1;      /* 上电即可进入；Track_Reset / PID_ResetAll 会重新置 1 */
 
 uint16_t ErectTime = 0;			/* 本次 ERECT 已经跑了多少 ms，每 10ms 加一次；也用于 LED 闪烁 */
 float LeftSpeed, RightSpeed;		/* 左/右轮速度（转/秒） */

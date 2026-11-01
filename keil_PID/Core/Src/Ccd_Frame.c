@@ -264,19 +264,49 @@ void Ccd_Frame(void)
 
                 if (CornerSeen >= CORNER_CONFIRM && !tIsT)
                 {
-                    /* 连续压过阈值两次，确认是直角 -> 进入转弯
+                    /* 连续压过阈值两次，确认是直角。
                      * 方向沿用循迹环的转向通路(Target = TRACK_DIR x 方向 x 转速)，
                      * 保证"转过去"和"循迹纠偏"用的是同一套符号约定。 */
-                    CornerDir      = (int8_t)((eR ? 1 : -1) * CORNER_SIDE_SIGN);
-                    CornerState    = CORNER_PIVOT;
-                    YawTurned      = 0.0f;
-                    YawPrev        = Yaw;       /* 记下当前 Yaw 作为增量起点 */
-                    PivotTicks     = 0;
-                    PivotOk        = 0;         /* 新一轮转弯，抓线确认计数从头来 */
-                    TrackLostCnt   = 0;
-                    CornerSeen     = 0;
-                    TurnTargetCmd  = TRACK_DIR * (float)CornerDir * PIVOT_RATE;
-                    PID_ClearIntegral(&TurnPID);   /* 转向目标从"跟踪中线偏差"换成"固定转速"，旧积分作废 */
+                    CornerDir = (int8_t)((eR ? 1 : -1) * CORNER_SIDE_SIGN);
+
+#if NAV_ENABLE
+                    /* ---------- 第四关：左直角 -> 惯性导航段（右转 + 定距直行）----------
+                     * CornerDir 的语义是"转向"不是"图像哪端发黑"：+1 = 右转，-1 = 左转
+                     * （见 main.c 该变量的定义，已由 2026-11-01 的 T 路口日志确认）。
+                     * 所以"左直角"就是 CornerDir == -1；命中后把方向翻成 +1 再转。
+                     * 右直角不归第四关管，继续走下面的 PIVOT 原逻辑。 */
+                    if (CornerDir == -1 && NavArmed)
+                    {
+                        NavArmed       = NAV_ONE_SHOT ? 0u : 1u;  /* 只认第一个左直角(可关) */
+                        CornerDir      = +1;                      /* 第四关改为向右转 */
+                        CornerState    = CORNER_NAV;
+                        NavPhase       = NAV_PHASE_TURN;
+                        NavDist        = 0.0f;
+                        NavStickerCnt  = 0;
+                        NavStickerSeen = 0;
+                        NavTicks       = 0;
+                        YawTurned      = 0.0f;
+                        YawPrev        = Yaw;      /* 与原 PIVOT 同款：先记下增量起点 */
+                        PivotTicks     = 0;
+                        PivotOk        = 0;
+                        TrackLostCnt   = 0;
+                        CornerSeen     = 0;
+                        TurnTargetCmd  = TRACK_DIR * (float)CornerDir * PIVOT_RATE;
+                        PID_ClearIntegral(&TurnPID);   /* 换目标前清转向环旧积分 */
+                    }
+                    else
+#endif
+                    {
+                        CornerState    = CORNER_PIVOT;
+                        YawTurned      = 0.0f;
+                        YawPrev        = Yaw;       /* 记下当前 Yaw 作为增量起点 */
+                        PivotTicks     = 0;
+                        PivotOk        = 0;         /* 新一轮转弯，抓线确认计数从头来 */
+                        TrackLostCnt   = 0;
+                        CornerSeen     = 0;
+                        TurnTargetCmd  = TRACK_DIR * (float)CornerDir * PIVOT_RATE;
+                        PID_ClearIntegral(&TurnPID);   /* 转向目标从"跟踪中线偏差"换成"固定转速"，旧积分作废 */
+                    }
                 }
                 else if (CCD_Lost)
                 {
@@ -361,6 +391,83 @@ void Ccd_Frame(void)
 #endif
             }
 
+            else if (CornerState == CORNER_NAV)
+            {
+                /* ================= 第四关：惯性导航 =================
+                 * 三段推进，全部靠 Yaw 累计角与编码器里程，不读 CCD 纠偏 ——
+                 * 转过 100 度以上之后线早已不在 110mm 视场内，拿 CCD 当地图只会得到"丢线"。
+                 * 里程 NavDist 与计时 NavTicks 由 tim3_pid.c 维护（50ms / 10ms 拍），
+                 * 这里只做相位判定与输出。三段共用 NavTicks，切段时清零。 */
+                TrackLostCnt = 0;      /* 第四关不参与丢线计数，否则会被误判成出循迹区 */
+
+                if (NavPhase == NAV_PHASE_TURN)
+                {
+                    /* 第一段：向右转。方向在进入时已写进 CornerDir(=+1)。 */
+                    TurnTargetCmd = TRACK_DIR * (float)CornerDir * PIVOT_RATE;
+
+                    if (fabsf(YawTurned) >= NAV_TURN_DEG
+                        || (int32_t)NavTicks >= (int32_t)NAV_TURN_TIMEOUT_MS)
+                    {
+                        /* 到位，或打滑/卡住转不到目标角(NavTicks 超时) —— 两种情况都进 RUN。
+                         * 超时不能退回循迹：这时车头已横移很远，线不在视场里。 */
+                        NavPhase   = NAV_PHASE_RUN;
+                        NavDist    = 0.0f;
+                        NavTicks   = 0;
+                        NavYawHold = Yaw;      /* 把进 RUN 这一刻的朝向作为航向保持目标 */
+                        TurnTargetCmd = 0.0f;
+                        PID_ClearIntegral(&TurnPID);
+                        PID_ClearIntegral(&SpeedPID);  /* 转弯打滑会把速度积分灌满，不清就往前冲 */
+                    }
+                }
+                else if (NavPhase == NAV_PHASE_RUN)
+                {
+                    /* 第二段：定距直行。
+                     * 航向用小比例修正锁住：两轮电机/地面不完全对称，纯"差速给0"跑 11 秒
+                     * 会一路漂。符号见 Ccd_Frame.h 的 NAV_HEADING_KP。 */
+                    float dHead = Yaw - NavYawHold;   /* >0 = 车头偏左 = 需要右转 */
+                    float corr;
+
+                    if      (dHead >  180.0f) dHead -= 360.0f;
+                    else if (dHead < -180.0f) dHead += 360.0f;
+
+                    corr = NAV_HEADING_KP * dHead;
+                    if      (corr >  NAV_HEADING_MAX) corr =  NAV_HEADING_MAX;
+                    else if (corr < -NAV_HEADING_MAX) corr = -NAV_HEADING_MAX;
+                    TurnTargetCmd = corr;
+
+                    /* ---- 黑贴纸计数：贴纸压在线上使线变宽，darkCnt 越上限计一次 ---- */
+                    if (NavDist >= NAV_STICKER_SETTLE_MM)
+                    {
+                        if (!NavStickerSeen && darkCnt >= NAV_STICKER_DARK)
+                        {
+                            NavStickerSeen = 1u;
+                            if (NavStickerCnt < 99u) NavStickerCnt++;
+                        }
+                        else if (NavStickerSeen && darkCnt < NAV_STICKER_REL)
+                        {
+                            NavStickerSeen = 0u;   /* 回差：线宽掉回去才允许数下一张 */
+                        }
+                    }
+
+                    if (NavDist >= NAV_DIST_MM
+                        || (int32_t)NavTicks >= (int32_t)NAV_RUN_TIMEOUT_MS)
+                    {
+                        NavPhase      = NAV_PHASE_STOP;
+                        NavTicks      = 0;
+                        TurnTargetCmd = 0.0f;
+                        PID_ClearIntegral(&TurnPID);
+                        PID_ClearIntegral(&SpeedPID);
+                    }
+                }
+                else
+                {
+                    /* 第三段：到位。速度目标由 tim3_pid.c 按相位给 0，车原地直立保持 ——
+                     * 平衡车不能断电机，断了立刻倒。要彻底停：按键 / 发 0 / 切循迹，
+                     * 走 StopCar 或 Track_Reset（两者都会把本节课的 NAV 状态清掉）。 */
+                    TurnTargetCmd = 0.0f;
+                }
+            }
+
             /* ---------- T 分派：排在整条状态机链之后 ----------
              * 上面的直角触发已经被 !tIsT 挡掉了，但同帧它仍可能走"丢线计数"或
              * "按坏中线纠偏"这两条分支并写 TurnTargetCmd。分派放链尾，由这里覆盖
@@ -412,6 +519,16 @@ void Track_Reset(uint8_t on)
     CornerSeen    = 0;
     TSeen         = 0;
     PivotOk       = 0;
+
+    /* 第四关一并清零：重开循迹不该带着上一轮 NAV 的相位/里程/贴纸数上场。
+     * 特别是 NavPhase 停在 STOP 时，不复位的话车会一动不动。 */
+    NavPhase       = NAV_PHASE_TURN;
+    NavDist        = 0.0f;
+    NavStickerCnt  = 0;
+    NavStickerSeen = 0;
+    NavTicks       = 0;
+    NavYawHold     = 0.0f;
+    NavArmed       = 1;
 
     /* 开/关循迹把前进速度的来源整个换掉（摇杆 <-> 循迹），
      * 两个环的积分都属于上一个状态，一并清干净，避免切换瞬间冲一下。 */

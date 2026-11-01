@@ -144,5 +144,13 @@ void OLED_RenderStatus(void)
             OLED_Printf(64, 48, OLED_6X8, "B%04.1fV", BatVoltage);
     }
     OLED_Printf(0, 56, OLED_6X8, "TRK%c%+05.2f", TrackMode ? '!' : '-', TurnPID.Target);/* ! = 循迹中，- = 不循迹 */
+
+    /* 第四关进行中：在 TRK 那行右侧显示已数到的黑贴纸数(N)与里程(D, mm)。
+     * 这两列是上车核对用的：N 要和实际经过的贴纸数一致，D 应停在 NAV_DIST_MM 附近。
+     * 宽度：从 x=60 起 "N%02u D%03.0f" 最多 8 字 = 48px，收在 x=108，不越 128。 */
+    if (CornerState == CORNER_NAV)
+        OLED_Printf(60, 56, OLED_6X8, "N%02u D%03.0f",
+                    (unsigned)NavStickerCnt, (double)NavDist);
+
     OLED_Update();
 }

@@ -1,4 +1,4 @@
-﻿#ifndef __CAR_H
+#ifndef __CAR_H
 #define __CAR_H
 
 /* ==========================================================================
@@ -63,6 +63,16 @@
  * 属于共享层；转弯的其余参数在 Ccd_Frame.h。 */
 #define CORNER_LINE        0u       /* 平时循迹 */
 #define CORNER_PIVOT       1u       /* 转弯中：定速旋转，等 CCD 抓到新线（或超时保底） */
+#define CORNER_NAV         2u       /* 第四关惯性导航：识别到左直角后改为「右转 -> 定距直行(数贴纸) -> 停」
+                                     * 内部再由 NavPhase 分 TURN / RUN / STOP 三段。
+                                     * 参数宏在 Ccd_Frame.h，状态机在 Ccd_Frame.c，
+                                     * 转角计时与里程积分在 tim3_pid.c 的 10ms / 50ms 拍。 */
+
+/* ===== 第四关的三个子阶段（NavPhase 的取值） =====
+ * 被 Ccd_Frame.c(状态机) 与 tim3_pid.c(里程积分、速度目标) 同时读，属于共享层。 */
+#define NAV_PHASE_TURN     0u       /* 原地/弧线右转，累计到 NAV_TURN_DEG */
+#define NAV_PHASE_RUN      1u       /* 定距直行，期间数经过的黑贴纸 */
+#define NAV_PHASE_STOP     2u       /* 到位：速度目标 0，原地直立保持（平衡车不能直接断电） */
 
 /* ---------- 全局变量：定义在 main.c ---------- */
 extern volatile uint8_t CarState;
@@ -133,6 +143,18 @@ extern uint16_t PivotTicks;
 extern uint8_t  CornerSeen;
 extern uint8_t  TSeen;
 extern uint8_t  PivotOk;
+
+/* ---- 第四关惯性导航的状态量（都在 CORNER_NAV 期间才有意义）----
+ * 定义在 main.c，写它的有两处：Ccd_Frame.c(相位推进) 与 tim3_pid.c(计时/里程积分)。
+ * 单字节读写靠 Cortex-M3 的原子性，float 由 10ms 中断写、主循环读，
+ * 只用于显示与阈值比较，不做多步运算，所以不加锁。 */
+extern volatile uint8_t NavPhase;      /* NAV_PHASE_TURN / RUN / STOP */
+extern volatile float   NavDist;       /* 已走过的里程(mm)，RUN 段起点清零，可倒退为负 */
+extern volatile uint8_t NavStickerCnt; /* 经过的黑贴纸数量（贴纸使线变宽，darkCnt 越阈计数） */
+extern volatile uint8_t NavStickerSeen;/* 贴纸回差状态：1 = 正压在一张上，防止一张数成多次 */
+extern uint16_t NavTicks;              /* 本段已跑 ms（tim3_pid.c 每 10ms 加一次） */
+extern float    NavYawHold;            /* RUN 段锁定的朝向(度)：直行期间用它做航向保持 */
+extern volatile uint8_t NavArmed;      /* 1 = 允许进入第四关；进入后清 0（NAV_ONE_SHOT=1 时只认第一个左直角） */
 extern uint16_t ErectTime;
 extern float LeftSpeed, RightSpeed;
 extern float AveSpeed, DifSpeed;

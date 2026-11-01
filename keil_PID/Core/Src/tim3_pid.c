@@ -348,6 +348,16 @@ void PID_ResetAll(void)
     YawTurned      = 0.0f;
     PivotTicks     = 0;
     PivotOk        = 0;
+
+    /* 第四关一并复位：否则下次收到 "1" 起立后会带着上一轮的 NAV 相位上场，
+     * 轻则原地不动（相位停在 STOP），重则直接按旧里程判定"已到位"。 */
+    NavPhase       = NAV_PHASE_TURN;
+    NavDist        = 0.0f;
+    NavStickerCnt  = 0;
+    NavStickerSeen = 0;
+    NavTicks       = 0;
+    NavYawHold     = 0.0f;
+    NavArmed       = 1;
 }
 /* ==========================================================================
  * PID_ClearIntegral()：切状态时清掉上一个状态残留的积分。
@@ -659,6 +669,16 @@ static void Tick10_Attitude(void)
                     PivotOk        = 0;
                 }
             }
+            else if (CornerState == CORNER_NAV)
+            {
+                /* 第四关：转角只在 TURN 段累加，累到 NAV_TURN_DEG 由 Ccd_Frame.c 切段；
+                 * 这里不设整段超时 —— TURN / RUN 各有各的时限，由状态机按段管。
+                 * ★ 不能沿用上面 PIVOT 的 PIVOT_TIMEOUT_MS：那是 3 秒，
+                 *   而第四关单是直行 80cm 就要 11 秒，套上去会中途被强行踢回循迹。 */
+                NavTicks += 10;
+                if (NavPhase == NAV_PHASE_TURN)
+                    YawTurned += dYaw;
+            }
         }
 
         /* ================= 执行器分发：按状态出 PWM ================= */
@@ -827,6 +847,14 @@ static void Tick50_SpeedTurn(void)
         /* 求平均与差速 */
 			AveSpeed = (LeftSpeed + RightSpeed) * 0.5f;	
 			DifSpeed = TURN_FB_SIGN * (LeftSpeed - RightSpeed);			
+
+        /* ---- 第四关里程积分（只在 RUN 段）----
+         * 距离 = 平均轮速(转/秒) x 轮周长(mm) x 采样周期(0.05s)，见 Ccd_Frame.h 的 WHEEL_CIRC_MM。
+         * 用 AveSpeed 而不是单轮：直行时两轮几乎相等，打滑时取平均更接近车体真实位移。
+         * 只在 RUN 段累加 —— TURN 段的位移不该算进"前进距离"，否则 80cm 会被提前走完。
+         * AveSpeed 为负(被反拖)时 NavDist 会减少，这是对的：算的是净位移。 */
+        if (CornerState == CORNER_NAV && NavPhase == NAV_PHASE_RUN)
+            NavDist += AveSpeed * WHEEL_CIRC_MM * 0.05f;
 			
         /* ---- 转向目标斜坡限速：每 50ms 最多变 TURN_SLEW，把 Cmd 渐变送到 Ramp ----
          * 无条件更新(不受 CarState 限制)：起立/急停时 Cmd 已被 PID_ResetAll 清 0，
@@ -853,8 +881,20 @@ static void Tick50_SpeedTurn(void)
 				{
 					float dSpd;
 
-					SpeedTargetCmd = (CornerState != CORNER_LINE) ? CORNER_SPEED
-					               : (TrackLineSeen ? TRACK_SPEED : 0.0f);
+					/* 第四关按相位给前进速度：TURN 沿用 PIVOT 的 CORNER_SPEED（车一边转一边走，
+					 * 见 CORNER_SPEED 的注释：给 0 会让 AvePWM 变负、差速被偷掉、车转不动）；
+					 * RUN 用 NAV_SPEED；STOP 给 0 —— 原地直立，不是断电机（平衡车断电即倒）。 */
+					if (CornerState == CORNER_NAV)
+					{
+						if      (NavPhase == NAV_PHASE_RUN)  SpeedTargetCmd = NAV_SPEED;
+						else if (NavPhase == NAV_PHASE_STOP) SpeedTargetCmd = 0.0f;
+						else                                 SpeedTargetCmd = CORNER_SPEED;
+					}
+					else
+					{
+						SpeedTargetCmd = (CornerState != CORNER_LINE) ? CORNER_SPEED
+						               : (TrackLineSeen ? TRACK_SPEED : 0.0f);
+					}
 
 					dSpd = SpeedTargetCmd - SpeedTargetRamp;
 					if      (dSpd >  SPEED_SLEW) SpeedTargetRamp += SPEED_SLEW;
