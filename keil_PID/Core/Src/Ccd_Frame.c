@@ -87,9 +87,6 @@
                                      * 实跑偏松/偏紧就调这个数：误把直角当 T 就调大，T 认不出就调小。 */
 #define T_CONFIRM          2        /* 连续几帧满足才认 T（2 帧 = 40ms） */
 #define PIVOT_RATE         0.9f     /* 转弯时写进 TurnPID.Target 的转速(转/秒)
-
-/* 原地转向的目标角：默认 = PIVOT_FIXED_DEG(84)，运行时可改（不改要重编） */
-volatile float PivotTargetDeg = PIVOT_FIXED_DEG;
                                      *   1.5(=540°/s) 是实测打滑极限(~0.9 转/秒差速)的 2~3 倍：
                                      *   2026-10-27 面对 T 字路口的抽搐日志里，命令恒 1.5 持续 3 秒，
                                      *   实测差速只在 +0.89 ~ -0.50 之间乱摆(粘滑极限环)，
@@ -97,6 +94,9 @@ volatile float PivotTargetDeg = PIVOT_FIXED_DEG;
                                      *   取 0.6(≈216°/s)：转完 PIVOT_MIN_DEG 只需零点几秒，
                                      *   同时给轮胎留 1/3 附着余量。配 TURN_FF=18 前馈约 10.8。
                                      *   转得太猛会甩尾/打滑就继续往下调。 */
+
+/* 原地转向的目标角：默认 = PIVOT_FIXED_DEG(84)，运行时可改（不改要重编） */
+volatile float PivotTargetDeg = PIVOT_FIXED_DEG;
 #define PIVOT_MIN_DEG     40.0f    /* 最小转角门槛(度)：转过这么多才开始信 CCD 的"抓到线"。
                                      * 不是硬停角 —— 停不停由 CCD 说了算，这里只是防起转瞬间
                                      * 旧线/直角黑区还没出画面就被 CCD_Lost==0 骗回去。
