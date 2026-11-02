@@ -102,7 +102,16 @@ extern volatile float PivotTargetDeg;  /* 原地转向目标角(度)，默认 84
  *         ②每一瞬间仍只有一只轮子出力，共模只剩 50%（单轮路线改不掉）。
  *   有效转角时间 = (84/N)/32 秒，换轴开销约 0.1 秒 -> N 超过约 26 就亏本。推荐 4~8。
  *   填 1 = 完全回到"始终锁同一只轮子"的老行为。只作用于 InnerLockMode=2，模式1 不受影响。 */
-#define PIVOT_LOCK_SEGS    4
+#define PIVOT_LOCK_SEGS    8
+/* ★ 换轴后静止窗口（2026-11-02 新增）：刚进入奇数段(段号为奇)的瞬间，把前进速度、差速、
+ *   转向目标同时清零并保持 PIVOT_SWAP_HOLD_MS 毫秒，让车真的站住，等平衡环把 AvePWM
+ *   收回 0 —— 换轴门限 |AvePWM| < |DifPWM|/2 - 2 只有在 |AvePWM| 接近 0 时才成立。
+ *   为什么需要它：N=4 的实测日志里 ph=1 那 12 拍 |AvePWM| 全程 9~22，门限 6~8 一次都没进；
+ *   车一直被速度环推着往前走，AvePWM 就下不来。先停住再换轴，门限才有机会开。
+ *   ⚠ 每个奇数段都停一次。N=8 时是 4 次 x 0.5s = 2s 纯停 + 两次加减速斜坡，
+ *     必须对照 PIVOT_TIMEOUT_MS(6000) 重算总时长，必要时把 N 降到 2~4。
+ *   填 0 = 关闭，回到旧的"进段立刻换轴"行为。只作用于 InnerLockMode=2。 */
+#define PIVOT_SWAP_HOLD_MS  500
 /* ★ 内轮锁是否也作用于第四关 NAV 转弯（2026-11-01 新增，默认 1）
  *   状态4 的 NAV 转弯与 PIVOT 走的是同一条执行链：Ccd_Frame.c:287 和 :300 都是
  *     TurnTargetCmd = TRACK_DIR * (float)CornerDir * PIVOT_RATE;

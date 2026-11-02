@@ -896,6 +896,18 @@ static float TrackSlowFactor(float turnTarget)
     return a;
 }
 
+/* 换轴状态（Tick50 每 50ms 推进一拍）：
+ *   PivotSwapPhase     当前段号(0 起)，-1 = 不在转弯
+ *   PivotSwapPhasePrev 上一拍的段号，用来抓"刚进入某一段"的边沿
+ *   PivotSwapHold      换轴后静止窗口剩余拍数，0 = 不在窗口内
+ * PivotSwapHold 故意不放进 #if：N==1 时它恒为 0（下面三处引用就不必再套条件编译），
+ * 而 PivotSwapPhase 只在换轴分支里用，放进去避免 N==1 时的 unused 警告。 */
+static uint16_t PivotSwapHold      = 0;
+#if (PIVOT_LOCK_SEGS > 1)
+static int16_t  PivotSwapPhase     = -1;
+static int16_t  PivotSwapPhasePrev = -1;
+#endif
+
 static void Tick50_SpeedTurn(void)
 {
         /* 编码器每 50ms 读一次，算出转速：
@@ -930,6 +942,44 @@ static void Tick50_SpeedTurn(void)
             else                        TurnTargetRamp  = TurnTargetCmd;
         }
 
+#if (PIVOT_LOCK_SEGS > 1)
+        /* ---------- 换轴分段号 + 换轴后静止窗口 ----------
+         * 放在 CarState / TrackMode 门禁之外：倒计时必须每 50ms 都走，
+         * 否则弯中某一拍没进速度环，窗口就卡住不降 -> 一直静止到 6s 超时。
+         * 段号只由 YawTurned 与当前目标角现算，无状态；静止期间车不转，
+         * YawTurned 不涨，段号也就不动 -> 窗口不会被自己重新触发。 */
+        PivotSwapPhase = -1;
+        if (CornerState != CORNER_LINE)
+        {
+            float segTotal = PivotTargetDeg;
+#if NAV_ENABLE
+            if (CornerState == CORNER_NAV) segTotal = NAV_TURN_DEG;
+#endif
+            float seg = segTotal / (float)(PIVOT_LOCK_SEGS);
+            if (seg < 1.0f) seg = 1.0f;                     /* 防除零 */
+            PivotSwapPhase = (int)(fabsf(YawTurned) / seg);
+        }
+        if (PivotSwapPhase > PivotSwapPhasePrev)
+        {
+            /* 段号前进且新段为奇：开静止窗口（只在换轴模式 2 里开）。
+             * 判据用"严格变大"而不是"不相等"：刹车时车可能轻微回摆，让段号在边界上
+             * 来回跳；用不等号会反复重开窗口，车就再也转不出这一段了。 */
+            PivotSwapPhasePrev = PivotSwapPhase;
+            PivotSwapHold = (((PivotSwapPhase & 1) != 0) && (InnerLockMode == 2))
+                          ? (uint16_t)((PIVOT_SWAP_HOLD_MS + 49u) / 50u)
+                          : 0u;
+        }
+        else if (PivotSwapPhase < PivotSwapPhasePrev)
+        {
+            PivotSwapPhasePrev = PivotSwapPhase;   /* 段号回退（刹车回摆）：不重开窗口 */
+            PivotSwapHold = 0u;
+        }
+        else if (PivotSwapHold > 0u)
+        {
+            PivotSwapHold--;
+        }
+#endif
+
 /* 执行 PID 计算 */
 			if (CarState == ST_BALANCE)		/* 只在直立行驶时才算速度环 + 转向环 */
 			{
@@ -962,10 +1012,31 @@ static void Tick50_SpeedTurn(void)
 						               : 0.0f);
 					}
 
+					#ifndef PIVOT_REV_SPEED
+					#define PIVOT_REV_SPEED   0.0f    /* 换轮奇数段的前进速度(取负后下发)；给 0 即关闭(-0 == 0)。
+					                                   * 2026-11-02 实测 -0.35 的后果：转角速度 61°/s -> 30°/s、
+					                                   * 只换到 1 次轮，且 |AvePWM| 峰值从 22 抬到 37（让车倒退
+					                                   * 需要更大倾角，平衡环反而更用力），与"把 |AvePWM| 压小
+					                                   * 好让换轴门限通过"的目标正好相反，故归零退出比较。
+					                                   * 要复现那段行为就改回 0.35f。 */
+					#endif
+					#if (PIVOT_LOCK_SEGS > 1)
+											/* 换轮奇数段：前进速度取负（PIVOT_REV_SPEED 为 0 时不起作用）。
+											 * 段号统一由 Tick50 开头的状态机算，这里不再重复算一遍，
+											 * 免得改目标角/改 N 时两处公式漂移。 */
+											if (PivotSwapPhase > 0 && (PivotSwapPhase & 1))
+												SpeedTargetCmd = -PIVOT_REV_SPEED;
+					#endif
 					dSpd = SpeedTargetCmd - SpeedTargetRamp;
 					if      (dSpd >  SPEED_SLEW) SpeedTargetRamp += SPEED_SLEW;
 					else if (dSpd < -SPEED_SLEW) SpeedTargetRamp -= SPEED_SLEW;
 					else                         SpeedTargetRamp  = SpeedTargetCmd;
+					if (PivotSwapHold > 0u)
+					{
+						SpeedTargetCmd  = 0.0f;
+						SpeedTargetRamp = 0.0f;	/* 绕过 SPEED_SLEW 直接归零：窗口只有 0.5s，
+						                         * 按斜坡慢慢降的话大半时间都在减速，根本停不住 */
+					}
 
 					SpeedPID.Target = SpeedTargetRamp;
 				}
@@ -981,12 +1052,15 @@ static void Tick50_SpeedTurn(void)
 				AnglePID.Target = SpeedPID.Out;		/* 串级：速度环的输出就是直立环的目标倾角 */
 				
 /* 转向 PID 计算 */
-				TurnPID.Target = TurnTargetRamp;	/* 用斜坡后的目标；前馈 TURN_FF*Target 也跟着渐变，不再阶跃 */
+				/* 静止窗口内把转向目标也置 0：否则 TurnPID 对着"车没在转"持续出力，
+				 * 退出窗口那一拍 DifPWM 会从 0 阶跃回 16~21。 */
+				TurnPID.Target = (PivotSwapHold > 0u) ? 0.0f : TurnTargetRamp;	/* 用斜坡后的目标；前馈 TURN_FF*Target 也跟着渐变，不再阶跃 */
 				DifSpeedFilter += 0.5f * (DifSpeed - DifSpeedFilter);	/* 转向角速度一阶低通，滤掉编码器量化噪声 */
 				TurnPID.Actual = DifSpeedFilter;			
 				PID_Update(&TurnPID);				// 转向 PID 计算
 				DifPWM = (int16_t)(TurnPID.Out + TURN_FF * TurnPID.Target);	/* 转向输出 + 转向前馈 */
 				if (DifPWM > 50) DifPWM = 50; else if (DifPWM < -50) DifPWM = -50;	/* 限幅 ±50：前馈+反馈叠加会超 */
+				if (PivotSwapHold > 0u) DifPWM = 0;	/* 静止窗口：差速清零 -> 两轮只出共模，车不转，也不会触发内轮锁 */
         }
 }
 /* ==========================================================================
