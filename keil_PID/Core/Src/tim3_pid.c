@@ -737,7 +737,7 @@ static void Tick10_Attitude(void)
                 /* 每 PIVOT_FIXED_DEG/N 度换一次转轴。YawTurned 进 PIVOT 时由
                  * Ccd_Frame.c 清零，这里直接当进度用（grep 一下 YawTurned 的三处 =0）。 */
                 {
-                    float segTotal = PIVOT_FIXED_DEG;   /* 段长跟随当前状态的总转角 */
+                    float segTotal = PivotTargetDeg;   /* 段长跟随当前目标角（可在线改） */
 #if NAV_ENABLE
                     if (CornerState == CORNER_NAV) segTotal = NAV_TURN_DEG;
 #endif

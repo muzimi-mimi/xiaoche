@@ -178,11 +178,11 @@ volatile int16_t TestPWM = 0;		// 开环测试 PWM：仅在 ST_IDLE 生效，0=�
 
 
 
-volatile int16_t InnerLockMode = 3;	// 内轮强制不转(方案三)：0=关 1=只钳弱反转段 2=内轮钳0 3=内轮设下限；[slider,InnerLock,值] 在线切
+volatile int16_t InnerLockMode = 2;	// 内轮强制不转(方案三)：0=关 1=只钳弱反转段 2=内轮钳0 3=内轮设下限；[slider,InnerLock,值] 在线切
 									// 2026-11-01 实测模式2 可用，故默认取 2。10-28 那次"模式2 摔车"发生在
 									// INNER_LOCK_MAX_AVE 门限加入之前：钳内轮会破坏 (L+R)/2==AvePWM，
 									// 门限在 |AvePWM|>15 时放开内轮，该摔车条件已不成立。见 Ccd_Frame.h:56
-									// 2026-11-01 默认改为 3（内轮设下限，见 Ccd_Frame.h 的 INNER_LOCK_FLOOR_*）：
+									// 2026-11-02 默认仍为 2（模式3 内轮设下限待实测，见 Ccd_Frame.h 的 INNER_LOCK_FLOOR_*）：
 									// 模式2 把内轮钉 0，但 11-01 的 158 帧日志显示转弯中内轮本就被负载拖到
 									// 0.2~0.35 转/秒，钉 0 是多余的；给下限让它保持微转。
 									// 回退：串口发 [slider,InnerLock,2] 立刻回模式2，不用重编。

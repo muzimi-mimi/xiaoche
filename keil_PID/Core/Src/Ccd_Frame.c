@@ -87,6 +87,9 @@
                                      * 实跑偏松/偏紧就调这个数：误把直角当 T 就调大，T 认不出就调小。 */
 #define T_CONFIRM          2        /* 连续几帧满足才认 T（2 帧 = 40ms） */
 #define PIVOT_RATE         0.9f     /* 转弯时写进 TurnPID.Target 的转速(转/秒)
+
+/* 原地转向的目标角：默认 = PIVOT_FIXED_DEG(84)，运行时可改（不改要重编） */
+volatile float PivotTargetDeg = PIVOT_FIXED_DEG;
                                      *   1.5(=540°/s) 是实测打滑极限(~0.9 转/秒差速)的 2~3 倍：
                                      *   2026-10-27 面对 T 字路口的抽搐日志里，命令恒 1.5 持续 3 秒，
                                      *   实测差速只在 +0.89 ~ -0.50 之间乱摆(粘滑极限环)，
@@ -335,12 +338,20 @@ void Ccd_Frame(void)
             }
             else if (CornerState == CORNER_PIVOT)
             {
-                /* 转弯时转向目标固定：
-                 * 每帧都写一次而不是只在开始时写一次，50ms 段每拍都要用 Target，
-                 * 而且 TURN_FF 前馈要一直跟着，中途改成 0 会丢前馈、转不动 */
-                TurnTargetCmd  = ((int32_t)PivotTicks >= (int32_t)PIVOT_ADVANCE_MS)
-                               ? (TRACK_DIR * (float)CornerDir * PIVOT_RATE)
-                               : 0.0f;      /* 前馈段内：先直行不动，等车头越过直角再转 */
+                {
+                    /* 剩余角小于 PIVOT_CREEP_DEG 后线性降速收舵，减小惯性超调 */
+                    float remainDeg = PivotTargetDeg - fabsf(YawTurned);
+                    float rateCmd;
+
+                    if      (remainDeg >= PIVOT_CREEP_DEG) rateCmd = PIVOT_RATE;
+                    else if (remainDeg <= 0.0f)            rateCmd = PIVOT_RATE_CREEP;
+                    else rateCmd = PIVOT_RATE_CREEP
+                                 + (PIVOT_RATE - PIVOT_RATE_CREEP) * (remainDeg / PIVOT_CREEP_DEG);
+
+                    TurnTargetCmd = ((int32_t)PivotTicks >= (int32_t)PIVOT_ADVANCE_MS)
+                                  ? (TRACK_DIR * (float)CornerDir * rateCmd)
+                                  : 0.0f;      /* 前馈段内：先直行不动，等车头越过直角再转 */
+                }
                 TrackLostCnt   = 0;         /* 转弯不参与"丢线"计数，否则会把直角误判成丢线 */
 
                 /* ---------- 停转判据：两模式互斥，由 PIVOT_USE_CCD_STOP 选择 ---------- */
@@ -373,7 +384,9 @@ void Ccd_Frame(void)
                  * 等它就等于白转 1 度多。
                  * 角度到不了(打滑 / 卡住)由 10ms 层的 PIVOT_TIMEOUT_MS 保底退回。 */
                 PivotOk = 0;                    /* 本模式不用这个计数，保持干净 */
-                if (fabsf(YawTurned) >= PIVOT_FIXED_DEG)
+                /* 预测停转：按当前角速度提前 PIVOT_STOP_LEAD_MS 收舵 */
+                if (fabsf(YawTurned) + fabsf(YawRate) * (PIVOT_STOP_LEAD_MS / 1000.0f)
+                    >= PivotTargetDeg)
                 {
                     CornerState    = CORNER_LINE;
                     CornerSeen     = 0;

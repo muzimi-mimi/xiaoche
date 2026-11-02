@@ -103,6 +103,15 @@ void Blue_ProcessPackets(void)
                          * 就是用户输入的原数，超范围时能在串口上立刻看出来。 */
                         TestPWM = (int16_t)atof(Value);		// 写入开环 PWM 测试量
                     }
+                    else if (strcmp(Name, "PivotDeg") == 0)   // ★ 原地转向目标角(度)
+                    {
+                        /* 直角/终点原地转的停转角度，运行时改，不用重编。
+                         * 限 [10,300]：小于 10 度测不出角速度，大于 300 会绕回并让换轴段数失效。 */
+                        float d = (float)atof(Value);
+                        if (d < 10.0f)  d = 10.0f;
+                        if (d > 300.0f) d = 300.0f;
+                        PivotTargetDeg = d;
+                    }
                     else if (strcmp(Name, "InnerLock") == 0)	// ★ 内轮强制不转模式 0/1/2/3
                     {
                         /* 运行时切换，改完立刻生效，不用重编也不用停车。

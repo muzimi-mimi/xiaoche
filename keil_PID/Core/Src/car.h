@@ -146,6 +146,7 @@ extern volatile int8_t  CornerDir;
 extern volatile float   YawTurned;
 extern float    YawPrev;
 extern uint16_t PivotTicks;
+extern volatile float PivotTargetDeg;
 extern uint8_t  CornerSeen;
 extern uint8_t  TSeen;
 extern uint8_t  PivotOk;

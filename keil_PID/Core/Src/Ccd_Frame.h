@@ -83,6 +83,16 @@
  *   所以最终朝向要按实测校这个数：转多了减小(如 84)，转少了加大(如 95)。
  *   标定：跑一次，看 OLED 的 YawTurned 停在哪、车头实际朝哪。 */
 #define PIVOT_FIXED_DEG    84.0f
+/* ★ 2026-11-02 原地转向角度精度三项（都作用于 PIVOT 定角转，可在线改）
+ *   1) 目标角改用 PivotTargetDeg（默认 = PIVOT_FIXED_DEG），串口 [slider,PivotDeg,值] 改
+ *   2) 剩余角 < PIVOT_CREEP_DEG 后转速由 PIVOT_RATE 线性降到 PIVOT_RATE_CREEP
+ *   3) 停转按当前角速度提前 PIVOT_STOP_LEAD_MS 收舵，抵消收舵后的惯性余转
+ * 依据：84° 定速转实测稳定超调，根因是收舵时轮子还在 0.9 转/秒上，不是 Yaw 算不准。 */
+#define PIVOT_CREEP_DEG      12.0f   /* 进入爬行的剩余角(度) */
+#define PIVOT_RATE_CREEP     0.30f   /* 爬行段差速目标(转/秒) */
+#define PIVOT_STOP_LEAD_MS   80.0f   /* 停转提前量(ms)：按 |YawRate| 折算 */
+
+extern volatile float PivotTargetDeg;  /* 原地转向目标角(度)，默认 84，[slider,PivotDeg,值] 在线改 */
 
 /* ★ 内轮锁分段数 N（2026-11-01 新增）：把一次原地转切成 N 段，每段换一只轮子当转轴
  *   单轮死锁时车心被迫绕被锁的那个轮子画弧，84° 转完横移约 131mm(几何值 W*sin(θ/2))，
