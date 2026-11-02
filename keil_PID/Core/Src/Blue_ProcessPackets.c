@@ -103,15 +103,15 @@ void Blue_ProcessPackets(void)
                          * 就是用户输入的原数，超范围时能在串口上立刻看出来。 */
                         TestPWM = (int16_t)atof(Value);		// 写入开环 PWM 测试量
                     }
-                    else if (strcmp(Name, "InnerLock") == 0)	// ★ 内轮强制不转模式 0/1/2
+                    else if (strcmp(Name, "InnerLock") == 0)	// ★ 内轮强制不转模式 0/1/2/3
                     {
                         /* 运行时切换，改完立刻生效，不用重编也不用停车。
                          * 取值含义见 car.h 的 InnerLockMode 说明。
-                         * 越界直接裁到 [0,2]：模式号没有别的安全含义，
+                         * 越界直接裁到 [0,3]：模式号没有别的安全含义，
                          * 但非法值会让执行器分发落到未定义的分支上。 */
                         int16_t m = (int16_t)atof(Value);
                         if (m < 0) m = 0;
-                        if (m > 2) m = 2;
+                        if (m > 3) m = 3;
                         InnerLockMode = m;
                     }
 

@@ -771,7 +771,15 @@ static void Tick10_Attitude(void)
                 else
                 {
                     /* 模式A：内轮一律 >= 0，单轮驱动 */
-                    if (*pInner < 0) *pInner = 0;
+                    if (InnerLockMode == 3)
+                    {
+                        /* 模式C：内轮不钳死，抬到一个下限（定义见 Ccd_Frame.h 的
+                         * INNER_LOCK_FLOOR_*）。与模式A 只差"下限是 0 还是正值"。 */
+                        int16_t floorPWM = (int16_t)(INNER_LOCK_FLOOR_RATIO * fabsf((float)AvePWM));
+                        if (floorPWM < INNER_LOCK_FLOOR_PWM) floorPWM = INNER_LOCK_FLOOR_PWM;
+                        if (*pInner < floorPWM) *pInner = floorPWM;
+                    }
+                    else if (*pInner < 0) *pInner = 0;
                 }
             }
 
@@ -866,6 +874,28 @@ static void Tick10_Attitude(void)
         }
 }
 /* ---- 50ms 段：读编码器 -> 算速度 -> 速度环 + 转向环（TIM3 回调分频调用）---- */
+/* ---- 弯内减速（2026-11-01 新增，借 MSG3507_car 的 line_follow.c）----
+ * 转向目标越大 = 偏差越大（急弯/切边），把前进速度按比例压下去，
+ * 先转够再走，减少"冲过头再往回纠"的往返。
+ * 直道上 |TurnTargetCmd| 通常 < TRACK_SLOW_START，速度仍是 TRACK_SPEED，
+ * 不破坏"全程恒速"那条设计（见 Ccd_Frame.h 的 CORNER_SPEED 说明）。
+ * 取值：TRACK_GAIN=1.2 时满偏(63 像素)对应 1.2 转/秒，
+ *   TRACK_SLOW_START=0.45 约 37% 偏差(≈23 像素)才开始减速；
+ *   TRACK_SLOW_FULL=1.05 约 88% 偏差减到最低。
+ *   TRACK_SLOW_MIN=0.24 = TRACK_SPEED(0.35) 的 69%，仍远高于编码器
+ *   量化下限 0.08，不会踩进抖动区。 */
+#define TRACK_SLOW_START  0.45f
+#define TRACK_SLOW_FULL   1.05f
+#define TRACK_SLOW_MIN    0.24f
+
+static float TrackSlowFactor(float turnTarget)
+{
+    float a = (fabsf(turnTarget) - TRACK_SLOW_START) / (TRACK_SLOW_FULL - TRACK_SLOW_START);
+    if (a < 0.0f) a = 0.0f;
+    else if (a > 1.0f) a = 1.0f;
+    return a;
+}
+
 static void Tick50_SpeedTurn(void)
 {
         /* 编码器每 50ms 读一次，算出转速：
@@ -927,7 +957,9 @@ static void Tick50_SpeedTurn(void)
 					else
 					{
 						SpeedTargetCmd = (CornerState != CORNER_LINE) ? CORNER_SPEED
-						               : (TrackLineSeen ? TRACK_SPEED : 0.0f);
+						               : (TrackLineSeen
+						               ? (TRACK_SPEED - (TRACK_SPEED - TRACK_SLOW_MIN) * TrackSlowFactor(TurnTargetCmd))
+						               : 0.0f);
 					}
 
 					dSpd = SpeedTargetCmd - SpeedTargetRamp;

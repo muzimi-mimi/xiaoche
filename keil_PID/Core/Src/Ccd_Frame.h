@@ -55,6 +55,20 @@
  *   一旦它开始抢救，立刻把完整权限还回去。调大更"敢锁"但更容易摔。 */
 #define INNER_LOCK_MAX_AVE  15      /* 2026-11-01 由 10 调到 15，且门限比较改为含边界 >=/<=（原先严格 >/< 会把 |AvePWM| 恰好为 10 的帧误判成超限）。 */
 
+/* ---- 内轮下限（模式C，2026-11-01 新增，借 MSG3507_car 的 line_follow.c）----
+ * 只在 InnerLockMode==3 时用：内轮不再是"钳到 0"，而是"抬到下限"
+ *     下限 = max(INNER_LOCK_FLOOR_RATIO * |AvePWM|, INNER_LOCK_FLOOR_PWM)
+ * 参照值：MSG3507_car 的 LINE_INNER_WHEEL_MIN_RATIO=0.30、LINE_INNER_WHEEL_MIN_SPEED=4.0，
+ *   这里换成 PWM 单位：比例仍取 0.30，绝对值取 6 —— 本车空载死区 2~3 个数，
+ *   INNER_LOCK_DZ=10 是贴地余量，6 落在两者之间：够把内轮推出死区，
+ *   又不至于把差速吃掉一半。
+ * 与模式A 的区别：模式A 内轮可以到 0（纯转轴），模式C 内轮始终有正向出力，
+ *   转弯半径比模式A 大、车心横移小；这是"不绕轴"换"不打滑"的取舍。
+ * 与换轴的关系：PIVOT_LOCK_SEGS 的奇偶段换轴只认 InnerLockMode==2，
+ *   模式C 不参与换轴。 */
+#define INNER_LOCK_FLOOR_RATIO  0.30f
+#define INNER_LOCK_FLOOR_PWM    6
+
 #define PIVOT_TIMEOUT_MS   6000     /* 转弯超时：转了 6 秒还没等到线(打滑/卡住/丢线)就保底回循迹
                                      * 2026-11-01 3000->6000：实测一次正常转角要 2.6s，加上 PIVOT_LOCK_SEGS
                                      * 换轴开销(~0.1s/次)余量只剩 0.1s；上一份日志就在弯中被 3s 超时截断
