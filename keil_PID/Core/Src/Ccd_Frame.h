@@ -95,28 +95,44 @@
 extern volatile float PivotTargetDeg;  /* 原地转向目标角(度)，默认 84，[slider,PivotDeg,值] 在线改 */
 
 /* ★ 内轮锁分段数 N（2026-11-01 新增）：把一次原地转切成 N 段，每段换一只轮子当转轴
- *   单轮死锁时车心被迫绕被锁的那个轮子画弧，84° 转完横移约 131mm(几何值 W*sin(θ/2))，
+ *   ★ 2026-11-03 按需求隔离：只在第四关 NAV 转弯启用；第三关 PIVOT 不分段，始终锁内轮。
+ *   单轮死锁时车心被迫绕被锁的那个轮子画弧，NAV 115° 转完横移约 165mm(几何值 W*sin(θ/2))，
  *   远超 CCD 视场半宽(约 55mm)。分成 N 段后两段的平移方向相反、互相抵消，末位移约
- *   W*θ²/(4N)：  N=2 -> 约53mm   N=4 -> 约26mm   N=8 -> 约13mm
- *   代价：①每次换轴是一次阶跃，DIFPWM_SLEW 管不到单轮跳变；
+ *   W*θ²/(4N)：  N=2 -> 约99mm   N=4 -> 约49mm   N=8 -> 约25mm
+ *   代价：①每次换轴是一次阶跃，TURN_SLEW 只渐变目标值，管不到单轮跳变；
  *         ②每一瞬间仍只有一只轮子出力，共模只剩 50%（单轮路线改不掉）。
- *   有效转角时间 = (84/N)/32 秒，换轴开销约 0.1 秒 -> N 超过约 26 就亏本。推荐 4~8。
+ *   有效转角时间 = (NAV_TURN_DEG/N)/32 秒，除第 0 段外每段再加
+ *   PIVOT_SWAP_HOLD_MS(0.5s) 静止 -> N 超过约 5 段后静止占大头，推荐 2~4。
  *   填 1 = 完全回到"始终锁同一只轮子"的老行为。只作用于 InnerLockMode=2，模式1 不受影响。 */
-#define PIVOT_LOCK_SEGS    8
-/* ★ 换轴后静止窗口（2026-11-02 新增）：刚进入奇数段(段号为奇)的瞬间，把前进速度、差速、
- *   转向目标同时清零并保持 PIVOT_SWAP_HOLD_MS 毫秒，让车真的站住，等平衡环把 AvePWM
- *   收回 0 —— 换轴门限 |AvePWM| < |DifPWM|/2 - 2 只有在 |AvePWM| 接近 0 时才成立。
- *   为什么需要它：N=4 的实测日志里 ph=1 那 12 拍 |AvePWM| 全程 9~22，门限 6~8 一次都没进；
+
+
+
+
+#define PIVOT_LOCK_SEGS    4
+/* ★ 进段静止窗口（2026-11-02 新增，2026-11-03 扩到每段、且只服务第四关 NAV）：
+ *   刚进入一个新段(段号 1~N-1，
+ *   奇偶都算；第 0 段不停)的瞬间，把前进速度、差速、转向目标同时清零并保持
+ *   PIVOT_SWAP_HOLD_MS 毫秒，让车真的站住，等平衡环把 AvePWM 收回 0。
+ *   奇数段需要它，是因为换轴门限 |AvePWM| < |DifPWM|/2 - 2 只有 |AvePWM| 接近 0 才成立：
+ *   N=4 的实测日志里 ph=1 那 12 拍 |AvePWM| 全程 9~22，门限 6~8 一次都没进；
  *   车一直被速度环推着往前走，AvePWM 就下不来。先停住再换轴，门限才有机会开。
- *   ⚠ 每个奇数段都停一次。N=8 时是 4 次 x 0.5s = 2s 纯停 + 两次加减速斜坡，
- *     必须对照 PIVOT_TIMEOUT_MS(6000) 重算总时长，必要时把 N 降到 2~4。
- *   填 0 = 关闭，回到旧的"进段立刻换轴"行为。只作用于 InnerLockMode=2。 */
-#define PIVOT_SWAP_HOLD_MS  500
+ *   偶数段的内锁也受 |AvePWM| <= INNER_LOCK_MAX_AVE(15) 约束，不先停就只能继承
+ *   上一段残留的 AvePWM(实测 9~22，横跨 15)，起点靠碰运气；所以每段都停。
+ *   第 0 段(NAV 刚确认)不停：入口还在正常循迹速度上，停了等于到弯先刹一脚。
+ *   ⚠ N=4 时是 3 次 x 0.5s = 1.5s 纯停；NAV 115° 转角本身 2.1~3.8s，
+ *     合计 3.6~5.3s，NAV_TURN_TIMEOUT_MS 为 8000，够用。
+ *   填 0 = 关闭，回到旧的"进段立刻换轴"行为。只作用于 InnerLockMode=2；
+ *   第三关 PIVOT 不执行这个窗口（段号恒为 -1）。 */
+
+
+
+
+#define PIVOT_SWAP_HOLD_MS  800
 /* ★ 内轮锁是否也作用于第四关 NAV 转弯（2026-11-01 新增，默认 1）
  *   状态4 的 NAV 转弯与 PIVOT 走的是同一条执行链：Ccd_Frame.c:287 和 :300 都是
  *     TurnTargetCmd = TRACK_DIR * (float)CornerDir * PIVOT_RATE;
  *   之后共用同一个 TurnPID + TURN_FF。差别只在"停止判据"：
- *     NAV   : fabsf(YawTurned) >= NAV_TURN_DEG(115°) / 2500ms
+ *     NAV   : fabsf(YawTurned) >= NAV_TURN_DEG(115°) / NAV_TURN_TIMEOUT_MS
  *     PIVOT : 固定角 PIVOT_FIXED_DEG(84°) / PIVOT_TIMEOUT_MS
  *   所以原先只写 CornerState == CORNER_PIVOT 的卫语句，会让左直角(被 NAV 接管)
  *   永远测不到内轮锁和分段 N —— 2026-11-01 实测 151 帧日志就是这种情况。
@@ -211,8 +227,12 @@ extern volatile float PivotTargetDeg;  /* 原地转向目标角(度)，默认 84
 #define NAV_SPEED           0.35f   /* RUN 段前进速度(转/秒)：默认与 TRACK_SPEED 一致，
                                      *   速度环就是按这个量级标定的，别超过 0.5。 */
 
-#define NAV_TURN_TIMEOUT_MS 2500    /* TURN 段保底(ms)：打滑/卡住转不到目标角就强行进 RUN，
-                                     *   不能像 PIVOT 那样退回循迹 —— 这时早就没线可循了。 */
+#define NAV_TURN_TIMEOUT_MS 8000    /* TURN 段保底(ms)：打滑/卡住转不到目标角就强行进 RUN，
+                                     *   不能像 PIVOT 那样退回循迹 —— 这时早就没线可循了。
+                                     *   2026-11-03 2500->8000：NAV 与 PIVOT 共用内轮锁分段
+                                     *   (PIVOT_LOCK_NAV=1)，每段静止 0.5s x 3 = 1.5s(第 0 段不停)，
+                                     *   115° 转角本身 2.1~3.8s，合计 3.6~5.3s；2500 会在
+                                     *   约 70° 处被截断，航向差 40° 以上。 */
 #define NAV_RUN_TIMEOUT_MS  20000   /* RUN 段保底(ms)：里程算不出来（编码器丢了/原地空转）时
                                      *   到点强制进 STOP。80cm 正常约 11s，给到 20s。 */
 

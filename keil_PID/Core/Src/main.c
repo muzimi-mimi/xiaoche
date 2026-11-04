@@ -270,7 +270,7 @@ PID_t AnglePID =  					// 角度环：输入 Angle，输出 AvePWM（直立控�
 	.ErrorIntMin = -600,			// 积分限幅
 
 };
-PID_t SpeedPID =  					// 速度环：输入 AveSpeed(转/秒)，输出 AnglePID.Target(目标倾角)
+PID_t SpeedPID =  					// 速度环：输入 AveSpeed(转/秒)，输出 VelocityPWM（★ 2026-11-04 三环独立：不再串级当 AnglePID.Target，见 tim3_pid.c 的 VELOCITY_DEG_TO_PWM）
 {
     .Kp = 2.7,						// 比例系数
     .Ki = 0.21,						// 积分系数

@@ -63,7 +63,7 @@ static const char *StateStr(void)
  *   y=8        T<阈值> Z<中线> <左>-<右> L<丢线>     x=92: C<状态> <转角>
  *   y=16..31   128 像素灰度波形（黑线表现为下陷）
  *   y=32       T:<角度环目标>       x=60: Yaw:<偏航角>
- *   y=40       Angle:<倾角实测>
+ *   y=40       Angle:<倾角实测>     x=84: N<已识别贴纸数>
  *   y=48       O:<角度环输出>       x=64: B<电池电压>/!<亏电>
  *   y=56       TRK<!/-><转向目标>
  *
@@ -120,6 +120,9 @@ void OLED_RenderStatus(void)
     OLED_Printf(0, 32, OLED_6X8, "T:%+05.1f", AnglePID.Target);	// 角度环目标值（也就是目标倾角）
     OLED_Printf(60, 32, OLED_6X8, "Yaw:%+07.2f", Yaw);			// 偏航角(度)：左转为正
     OLED_Printf(0, 40, OLED_6X8, "Angle:%+05.1f", Angle);			// 倾角实测值
+    /* 角度右侧显示第四关已数到的黑贴纸数(与 y=56 行末的 N 同源)。
+     * 宽度：x=84 起 "N%02u" 最多 3 字 = 18px，收在 x=102，不越 128。 */
+    OLED_Printf(84, 40, OLED_6X8, "N%02u", (unsigned)NavStickerCnt);
     OLED_Printf(0, 48, OLED_6X8, "O:%+05.0f", AnglePID.Out);	// 角度环输出
 //        OLED_Printf(0, 56, OLED_6X8, "GX%+05.1f", GX / 16.384f);  /* X 角速度(°/s)，静止应为 0 */
 //        OLED_Printf(42, 56, OLED_6X8, "GZ%+05.1f", GZ / 16.384f);  /* Z 角速度(°/s)，静止时应接近 YAW_BIAS_DPS */

@@ -247,6 +247,34 @@ static float AngleComp_Update(float accel_m, float gyro_m)
                              * 硬跳那一拍误差瞬间变成 -0.5，把 SpeedPID 积分反向灌满，
                              * 车停稳后那份负积分得先倒干净才能再往前走 ——
                              * "停下来容易、再起步慢半拍"就是这么来的。 */
+/* ★ 2026-11-04 试验：转向时压共模（用户选定方案）-------------------------------
+ * 目的：原地转/急弯时把共模 AvePWM 压到 ±TURN_AVE_CLAMP_PWM，减少"整车被推着
+ *   往前走、被锁的内轮被拖着滚"——日志实测：内轮 PWM≈0 却被拖到 +0.31 转/秒，
+ *   实际差速只剩指令的 1/4，车体只有 12°/s。
+ * 判据用 |TurnPID.Target| 而不是 CornerState：摇杆急转也生效（摇杆模式不进弯）。
+ * 限幅期间同时冻结 AnglePID 积分，否则退出限幅那一拍会把攒下的积分一次性放出来。
+ * 填 0 = 关闭；先 5 试：俯仰明显变软就加大，打滑/推头就减小。 */
+#define TURN_AVE_CLAMP_PWM  15
+#define TURN_AVE_CLAMP_TGT  0.5f    /* |TurnPID.Target| >= 它才压共模 */
+
+/* ★★ 2026-11-04 三环独立（结构改动，参照 WHEELTEC B570 的并联结构）-----------
+ * 原来：串级 —— SpeedPID.Out 冒充 AnglePID.Target（"目标倾角"），
+ *       速度环的输出于是被塞进直立环的误差里，两个环的积分互相污染。
+ * 现在：三个环各算各的 PWM，在 PWM 域相加：
+ *         AvePWM = 直立环(-AnglePID.Out) + 速度环(SpeedPID.Out * 本系数)
+ *         DifPWM = 转向环(TurnPID.Out + TURN_FF*Target)   ← 一行都不动
+ *       直立环 Target 固定为 0（机械中值），速度环不再经过它。
+ *
+ * 系数不是拍脑袋，是推导出来的：串级时
+ *     AvePWM = -Kp_angle * (SpeedPID.Out - Angle)
+ *            = +Kp_angle * Angle  -  Kp_angle * SpeedPID.Out
+ *   对上式，并联形式的系数必须等于 **-Kp_angle = -16.9** 才与串级等价。
+ *   负号不是笔误：平衡车要加速，必须先让轮子往后转、把车压前倾，再往前走。
+ *
+ * 填 -16.9 = 与串级行为等价（第一次烧录应当看不出差别，这是刻意的、可验证的基线）；
+ * 之后可以把它当成独立的 PWM 环单独重调（典型范围 -10 ~ -25）。
+ * ⚠ 填 0 = 速度环失效（车不再主动保持位置），不要填 0。 */
+#define VELOCITY_DEG_TO_PWM   (-16.9f)
 /* ★ 2026-10-28 翻符号：TB6612 两路电机通道对调(LeftPWM 改走 BIN/TIM_CH4)后，
  *   同一个 DifPWM 产生的物理转向整体取反，原来的 -1 在新接线下变成**正反馈**
  *   —— 正是下面 10-28 注释里"越转越快直到翻车"那条。故翻成 +1。
@@ -688,8 +716,31 @@ static void Tick10_Attitude(void)
              * AnglePID 的输入是 Angle，输出取负后作为 AvePWM。
              * 符号反了车会立刻往倾倒方向加速，这一处只能用实测确认。 */
             AnglePID.Actual = Angle;
+#if (TURN_AVE_CLAMP_PWM > 0)
+            {
+                float intSave = AnglePID.ErrorInt;   /* 限幅期间冻结积分，见 TURN_AVE_CLAMP_PWM */
+                PID_Update(&AnglePID);
+                /* ★ 三环独立：直立环 + 速度环，在 PWM 域相加（原先是 AvePWM = -AnglePID.Out 串级） */
+                AvePWM = (int16_t)(-AnglePID.Out + SpeedPID.Out * VELOCITY_DEG_TO_PWM);
+                if (fabsf(TurnPID.Target) >= TURN_AVE_CLAMP_TGT)
+                {
+                    if (AvePWM > TURN_AVE_CLAMP_PWM)
+                    {
+                        AvePWM = TURN_AVE_CLAMP_PWM;
+                        AnglePID.ErrorInt = intSave;
+                    }
+                    else if (AvePWM < -TURN_AVE_CLAMP_PWM)
+                    {
+                        AvePWM = -TURN_AVE_CLAMP_PWM;
+                        AnglePID.ErrorInt = intSave;
+                    }
+                }
+            }
+#else
             PID_Update(&AnglePID);
-            AvePWM = -AnglePID.Out;
+            /* ★ 三环独立：直立环 + 速度环，在 PWM 域相加（原先是 AvePWM = -AnglePID.Out 串级） */
+            AvePWM = (int16_t)(-AnglePID.Out + SpeedPID.Out * VELOCITY_DEG_TO_PWM);
+#endif
 
             LeftPWM  = AvePWM + DifPWM / 2;
             RightPWM = AvePWM - DifPWM / 2;
@@ -734,27 +785,29 @@ static void Tick10_Attitude(void)
                 int      ph     = 0;        /* 内轮锁分段号，偶数=绕内轮，奇数=绕外轮 */
 
 #if (PIVOT_LOCK_SEGS > 1)
-                /* 每 PIVOT_FIXED_DEG/N 度换一次转轴。YawTurned 进 PIVOT 时由
-                 * Ccd_Frame.c 清零，这里直接当进度用（grep 一下 YawTurned 的三处 =0）。 */
+                /* 分段换轴只在第四关(NAV)用：2026-11-03 按需求隔离，
+                 * 第三关(PIVOT)保持原来的"始终锁内轮"，ph 固定 0。
+                 * 段长 = NAV_TURN_DEG/N；YawTurned 进 NAV 时由 Ccd_Frame.c 清零。 */
+                if (CornerState == CORNER_NAV)
                 {
-                    float segTotal = PivotTargetDeg;   /* 段长跟随当前目标角（可在线改） */
-#if NAV_ENABLE
-                    if (CornerState == CORNER_NAV) segTotal = NAV_TURN_DEG;
-#endif
-                    float seg = segTotal / (float)(PIVOT_LOCK_SEGS);
+                    float seg = NAV_TURN_DEG / (float)(PIVOT_LOCK_SEGS);
                     if (seg < 1.0f) seg = 1.0f;                     /* 防除零 */
                     ph = (int)(fabsf(YawTurned) / seg);
                 }
 #endif
 
                 if ((ph & 1) && InnerLockMode == 2
-                    && fabsf((float)AvePWM) < 0.5f * fabsf((float)DifPWM) - 2.0f)
+                    && (float)AvePWM < 0.5f * fabsf((float)DifPWM) - 2.0f)
                 {
                     /* 奇数段换轴：外轮钉 0 当转轴，内轮成唯一驱动轮 —— 但它必须
                      * ★反向★（与 DifPWM 异号）才转得对：内轮的值是 AvePWM - |Dif|/2，
-                     * 只有 |AvePWM| < |DifPWM|/2 时它才是负的。实测 |AvePWM| 冲到 +28
-                     * 而 |DifPWM|/2 只有 8~10，那一段内轮会被推成正号 -> 车倒着转回来，
-                     * 把上一段转过的角度原样抵掉。
+                     * 只有 AvePWM < |DifPWM|/2 时它才是负的。
+                     * ★ 2026-11-03：原来这里写的是 fabsf(AvePWM)，把"负得深"的帧也
+                     * 一起毙了 —— 可反向转弯时 AvePWM 恰恰是负的（-10~-20），内轮
+                     * 反而更负、几何完全成立。奇数段因此在"锁外轮 / 退回锁内轮 /
+                     * 双轮全给"三态间以 10ms 周期来回切，就是左轮锁不住、车抖的来源。
+                     * 实测 AvePWM 冲到 +28 而 |DifPWM|/2 只有 8~10，那一段内轮会被
+                     * 推成正号 -> 车倒着转回来，把上一段转过的角度原样抵掉。
                      * 所以两道保险：① 上面那个门限——几何不成立就不换轴，留在内轮轴
                      * （行为退化成原来的单轮锁）；② 仍把驱动轮钳成与 DifPWM 异号。
                      * 奇数段实发平均 = 驱动/2 <= 0（恒向后推），偶数段恒向前推，
@@ -943,31 +996,46 @@ static void Tick50_SpeedTurn(void)
         }
 
 #if (PIVOT_LOCK_SEGS > 1)
-        /* ---------- 换轴分段号 + 换轴后静止窗口 ----------
+        /* ---------- 分段号 + 进段静止窗口（只服务第四关 NAV） ----------
          * 放在 CarState / TrackMode 门禁之外：倒计时必须每 50ms 都走，
-         * 否则弯中某一拍没进速度环，窗口就卡住不降 -> 一直静止到 6s 超时。
-         * 段号只由 YawTurned 与当前目标角现算，无状态；静止期间车不转，
-         * YawTurned 不涨，段号也就不动 -> 窗口不会被自己重新触发。 */
+         * 否则弯中某一拍没进速度环，窗口就卡住不降 -> 一直静止到超时。
+         * 段号只由 YawTurned 与 NAV_TURN_DEG 现算，无状态；静止期间车不转，
+         * YawTurned 不涨，段号也就不动 -> 窗口不会被自己重新触发。
+         * 第三关 PIVOT 不分段：CornerState != CORNER_NAV 时段号恒为 -1，窗口不会开。 */
         PivotSwapPhase = -1;
-        if (CornerState != CORNER_LINE)
+        if (CornerState == CORNER_NAV)      /* 分段换轴只给第四关用；PIVOT 不分段 */
         {
-            float segTotal = PivotTargetDeg;
-#if NAV_ENABLE
-            if (CornerState == CORNER_NAV) segTotal = NAV_TURN_DEG;
-#endif
-            float seg = segTotal / (float)(PIVOT_LOCK_SEGS);
+            float seg = NAV_TURN_DEG / (float)(PIVOT_LOCK_SEGS);
             if (seg < 1.0f) seg = 1.0f;                     /* 防除零 */
             PivotSwapPhase = (int)(fabsf(YawTurned) / seg);
         }
         if (PivotSwapPhase > PivotSwapPhasePrev)
         {
-            /* 段号前进且新段为奇：开静止窗口（只在换轴模式 2 里开）。
+            /* 每进入一个新段(第 0 段除外)就开静止窗口，只在换轴模式 2 里开。
+             * 2026-11-03 由"仅奇数段"扩到每段：偶数段的内锁也受 |AvePWM|<=15
+             * (INNER_LOCK_MAX_AVE) 约束，不先停就只能看上一段残留的 AvePWM 碰运气
+             * (实测拐弯中 9~22，正好横跨 15)。窗口里速度/差速清零，0.5s 足够
+             * 把 AvePWM 拉回 0，每段起点都能过门限。
+             * 第 0 段不停：NAV 刚确认时车还在正常循迹速度上，停了等于到弯先刹一脚，
+             * 入口时序会被打乱；这一段也没有"上一段残留"的问题。
              * 判据用"严格变大"而不是"不相等"：刹车时车可能轻微回摆，让段号在边界上
              * 来回跳；用不等号会反复重开窗口，车就再也转不出这一段了。 */
             PivotSwapPhasePrev = PivotSwapPhase;
-            PivotSwapHold = (((PivotSwapPhase & 1) != 0) && (InnerLockMode == 2))
-                          ? (uint16_t)((PIVOT_SWAP_HOLD_MS + 49u) / 50u)
-                          : 0u;
+            if ((PivotSwapPhase > 0) && (InnerLockMode == 2) && (PIVOT_SWAP_HOLD_MS > 0))
+            {
+                PivotSwapHold = (uint16_t)((PIVOT_SWAP_HOLD_MS + 49u) / 50u);
+                /* 进窗先清两个积分：速度环 ErrorInt 里存的是上一段"维持前进/倒退"
+                 * 建立起来的倾角目标，而窗口里 SpeedPID.Target 已经是 0，它会和 P 项的
+                 * 刹车力矩对冲。实测第 1 个窗口(从偶数段进)AvePWM 全程 +10~+14、
+                 * 两轮仍 0.4~0.5 转/秒，后两个窗口积分本来就小，0.4s 内就降到 0.1。
+                 * TurnPID 同理：窗口里目标为 0，车身余转会让它反向积分，退出时给一脚。 */
+                PID_ClearIntegral(&SpeedPID);
+                PID_ClearIntegral(&TurnPID);
+            }
+            else
+            {
+                PivotSwapHold = 0u;
+            }
         }
         else if (PivotSwapPhase < PivotSwapPhasePrev)
         {
@@ -1013,7 +1081,7 @@ static void Tick50_SpeedTurn(void)
 					}
 
 					#ifndef PIVOT_REV_SPEED
-					#define PIVOT_REV_SPEED   0.0f    /* 换轮奇数段的前进速度(取负后下发)；给 0 即关闭(-0 == 0)。
+					#define PIVOT_REV_SPEED   0.45f    /* 换轮奇数段的前进速度(取负后下发)；给 0 即关闭(-0 == 0)。
 					                                   * 2026-11-02 实测 -0.35 的后果：转角速度 61°/s -> 30°/s、
 					                                   * 只换到 1 次轮，且 |AvePWM| 峰值从 22 抬到 37（让车倒退
 					                                   * 需要更大倾角，平衡环反而更用力），与"把 |AvePWM| 压小
@@ -1049,7 +1117,7 @@ static void Tick50_SpeedTurn(void)
 /* 速度环 PID 计算 */
 				SpeedPID.Actual = AveSpeed;			
 				PID_Update(&SpeedPID);				// 把组装好的速度喂给 PID 计算
-				AnglePID.Target = SpeedPID.Out;		/* 串级：速度环的输出就是直立环的目标倾角 */
+				AnglePID.Target = 0.0f;				/* ★ 三环独立：直立环目标恒为机械中值 0，速度环改走 VELOCITY_DEG_TO_PWM */
 				
 /* 转向 PID 计算 */
 				/* 静止窗口内把转向目标也置 0：否则 TurnPID 对着"车没在转"持续出力，
