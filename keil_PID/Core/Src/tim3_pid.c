@@ -254,7 +254,7 @@ static float AngleComp_Update(float accel_m, float gyro_m)
  * 判据用 |TurnPID.Target| 而不是 CornerState：摇杆急转也生效（摇杆模式不进弯）。
  * 限幅期间同时冻结 AnglePID 积分，否则退出限幅那一拍会把攒下的积分一次性放出来。
  * 填 0 = 关闭；先 5 试：俯仰明显变软就加大，打滑/推头就减小。 */
-#define TURN_AVE_CLAMP_PWM  15
+#define TURN_AVE_CLAMP_PWM  0
 #define TURN_AVE_CLAMP_TGT  0.5f    /* |TurnPID.Target| >= 它才压共模 */
 
 /* ★★ 2026-11-04 三环独立（结构改动，参照 WHEELTEC B570 的并联结构）-----------
@@ -939,7 +939,16 @@ static void Tick10_Attitude(void)
  *   量化下限 0.08，不会踩进抖动区。 */
 #define TRACK_SLOW_START  0.45f
 #define TRACK_SLOW_FULL   1.05f
-#define TRACK_SLOW_MIN    0.24f
+#define TRACK_SLOW_MIN    0.00f   /* ★ 2026-11-04 由 0.24f 改 0.00f：目标改成"只原地转向"。
+                                    * 依据 11-04 22:5x 日志(308 帧，硬打舵 |TurnPID.Target|=1.17)：
+                                    *   前进目标全程停在 0.20~0.24(就是旧的 TRACK_SLOW_MIN)，
+                                    *   速度环把这 0.24 追成共模 AvePWM=+15，而 |DifPWM|/2 只有 11，
+                                    *   于是 内轮 L = 15 - 11 = +4，落在死区；实测 LeftSpeed 全程 |LS|<=0.17、
+                                    *   |LS|>0.05 只有 18/308 帧 -> 左轮基本没转，车是**绕左轮画弧**，不是原地转。
+                                    *   几何条件 |AvePWM| < |DifPWM|/2 只有 23% 的帧成立。
+                                    * 代价：压到 0 会踩进编码器量化下限 0.08，速度环在 0 附近会有量化抖动；
+                                    *   但原地转本来就不该有前进目标，这是"原地"的前提，抖动交由死区补偿/差模解决。
+                                    * 想恢复"弯内仍慢慢走"就改回 0.24f。 */
 
 static float TrackSlowFactor(float turnTarget)
 {
@@ -1056,15 +1065,17 @@ static void Tick50_SpeedTurn(void)
  *   校验没过只说明这帧的中线不能拿来纠偏，不代表车离开了线。
  *   斜着追线、进直角前黑区变宽、左右沿配对抖动，都会让 CCD_Lost 短暂为 1，
  *   老逻辑把这些一律当作出循迹区，于是一秒一停地踩死 —— 走走停停的来源就在这。
- * 直角转弯期间用 CORNER_SPEED 而不是 0：车一边转一边往前走，不会停在直角点上。
+ * 直角转弯期间给 CORNER_SPEED（★ 2026-11-04 起为 0.00f = 原地转，见 Ccd_Frame.h 该宏的说明）。
  * 归零改成斜坡(见 SPEED_SLEW)：停是"减速到停"，再起步也不必先把反向积分倒干净。
  * 注意转向那一路仍然按 CCD_Lost 走(下面 TrackLostCnt 那段)：坏中线不许用来打舵。 */
 				if (TrackMode)
 				{
 					float dSpd;
 
-					/* 第四关按相位给前进速度：TURN 沿用 PIVOT 的 CORNER_SPEED（车一边转一边走，
-					 * 见 CORNER_SPEED 的注释：给 0 会让 AvePWM 变负、差速被偷掉、车转不动）；
+					/* 第四关按相位给前进速度：TURN 用 CORNER_SPEED（★ 2026-11-04 起为 0.00f，只原地转）。
+					 * 旧注释"给 0 会让 AvePWM 变负、差速被偷掉、车转不动"是**锁轮开着**时的结论：
+					 * 内轮被钉 0、共模又抢走一半差模才转不动。现在 InnerLockMode=0，两轮都能反转，
+					 * 共模归零恰恰是原地转的前提；
 					 * RUN 用 NAV_SPEED；STOP 给 0 —— 原地直立，不是断电机（平衡车断电即倒）。 */
 					if (CornerState == CORNER_NAV)
 					{
@@ -1081,12 +1092,17 @@ static void Tick50_SpeedTurn(void)
 					}
 
 					#ifndef PIVOT_REV_SPEED
-					#define PIVOT_REV_SPEED   0.45f    /* 换轮奇数段的前进速度(取负后下发)；给 0 即关闭(-0 == 0)。
+					#define PIVOT_REV_SPEED   0.00f    /* 换轮奇数段的前进速度(取负后下发)；给 0 即关闭(-0 == 0)。
+					                                   * ★ 2026-11-04 改 0：目标改成"只原地转向"，转向期间不留
+					                                   *   任何前进/倒退分量。11-04 22:16 日志 168 个转向帧实测：
+					                                   *   |DifPWM| 中位 26、AvePWM 中位 +13 —— 那 +13 就是
+					                                   *   CORNER_SPEED 在追 0.35 转/秒追出来的共模，它把两只轮子
+					                                   *   一起往前推，车才画弧而不是原地转。共模归零后差模
+					                                   *   L=+13 / R=-13，两轮都越过 6~8 的死区。
 					                                   * 2026-11-02 实测 -0.35 的后果：转角速度 61°/s -> 30°/s、
 					                                   * 只换到 1 次轮，且 |AvePWM| 峰值从 22 抬到 37（让车倒退
 					                                   * 需要更大倾角，平衡环反而更用力），与"把 |AvePWM| 压小
-					                                   * 好让换轴门限通过"的目标正好相反，故归零退出比较。
-					                                   * 要复现那段行为就改回 0.35f。 */
+					                                   * 好让换轴门限通过"的目标正好相反，故归零退出比较。 */
 					#endif
 					#if (PIVOT_LOCK_SEGS > 1)
 											/* 换轮奇数段：前进速度取负（PIVOT_REV_SPEED 为 0 时不起作用）。
