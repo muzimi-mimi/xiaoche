@@ -263,8 +263,8 @@ PID_t AnglePID =  					// 角度环：输入 Angle，输出 AvePWM（直立控�
     .Ki = 0.06,						// 积分系数
     .Kd = 30.4,						// 微分系数
 
-    .OutMax = 80,					// 输出限幅 -> 最大 PWM 80
-    .OutMin = -80,					// 输出限幅
+    .OutMax = 240,					// ★ 2026-11-04 三环独立：这里不再当执行器限幅，只做内部计算
+    .OutMin = -240,					// 真正的 ±80 限幅在 tim3_pid.c 的 AVE_PWM_LIMIT（两者相加之后做）
 	
 	.OutOffset = 0,					// 输出偏置：抵消 Out 正负不对称造成的静态偏差
 	

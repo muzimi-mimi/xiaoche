@@ -287,6 +287,16 @@ static float AngleComp_Update(float accel_m, float gyro_m)
  * ⚠ 填 0 = 速度环失效（车不再主动保持位置），不要填 0。 */
 #define VELOCITY_DEG_TO_PWM   (-16.9f)
 
+/* ★ 2026-11-04 修正并联饱和：执行器限幅只做一次，而且必须做在**两者相加之后**。
+ * 串级时饱和发生在 AnglePID.Out（误差里已经含了速度环的命令）；
+ * 并联后若把直立环先钳到 ±80、再减速度项，速度项最大 -84.5 会把直立环
+ * 整个抵消掉 —— 11-04 日志实测就是这个：Angle 挂在 +10~24°、
+ *   AvePWM 恒等于 -4（= 直立环 +80 被速度环 -84.5 吃掉）
+ *   而 SpeedPID.Target 被坏包锁死在 1.4，速度环一直顶着 OutMax。
+ * 所以 main.c 里把 AnglePID.OutMax/OutMin 放到 ±240（只做内部计算用），
+ * 真正的 ±80 在这里做。这样"车歪了要救"时直立环仍能拿到满权限。 */
+#define AVE_PWM_LIMIT   80
+
 
 
 /* ★ 2026-10-28 翻符号：TB6612 两路电机通道对调(LeftPWM 改走 BIN/TIM_CH4)后，
@@ -736,6 +746,8 @@ static void Tick10_Attitude(void)
                 PID_Update(&AnglePID);
                 /* ★ 三环独立：直立环 + 速度环，在 PWM 域相加（原先是 AvePWM = -AnglePID.Out 串级） */
                 AvePWM = (int16_t)(-AnglePID.Out + SpeedPID.Out * VELOCITY_DEG_TO_PWM);
+                if (AvePWM > AVE_PWM_LIMIT)       AvePWM =  AVE_PWM_LIMIT;
+                else if (AvePWM < -AVE_PWM_LIMIT) AvePWM = -AVE_PWM_LIMIT;
                 if (fabsf(TurnPID.Target) >= TURN_AVE_CLAMP_TGT)
                 {
                     if (AvePWM > TURN_AVE_CLAMP_PWM)
@@ -754,6 +766,8 @@ static void Tick10_Attitude(void)
             PID_Update(&AnglePID);
             /* ★ 三环独立：直立环 + 速度环，在 PWM 域相加（原先是 AvePWM = -AnglePID.Out 串级） */
             AvePWM = (int16_t)(-AnglePID.Out + SpeedPID.Out * VELOCITY_DEG_TO_PWM);
+            if (AvePWM > AVE_PWM_LIMIT)       AvePWM =  AVE_PWM_LIMIT;
+            else if (AvePWM < -AVE_PWM_LIMIT) AvePWM = -AVE_PWM_LIMIT;
 #endif
 
             LeftPWM  = AvePWM + DifPWM / 2;
@@ -890,8 +904,8 @@ static void Tick10_Attitude(void)
                 PID_Update(&TurnPID);
                 DifPWM = (int16_t)TurnPID.Out;
 
-                LeftPWM  = swing + DifPWM / 2;
-                RightPWM = swing - DifPWM / 2;
+                LeftPWM  = swing + DifPWM ;
+                RightPWM = swing - DifPWM ;
 
                 if (LeftPWM > 100)        LeftPWM  = 100;
                 else if (LeftPWM < -100)  LeftPWM  = -100;
