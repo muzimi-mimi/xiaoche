@@ -549,8 +549,16 @@ int main(void)
         Blue_ProcessPackets();
 
         /* ---------- 上位机链路：蓝牙调试口（可选）---------*/
-        len = sprintf(display_buf, "[plot:%f,%f,\t%d,%d,\t%d,%d,\t%f,%f,%.6f,%.6f,%d,%f\n]",
-TurnPID.Target,TurnPID.Actual1,LeftPWM,RightPWM,DifPWM,AvePWM,Angle,Yaw,RightSpeed,LeftSpeed,GX,SpeedPID.Target);//第12列 SpeedPID.Target：区分"有人在命令前进"与"外环符号反"——前者第12列跟着速度涨，后者恒为0
+        /* ★ 2026-11-04 第 13~15 列：把"到底在哪个状态、用的哪套锁轮"直接打出来。
+         *   之前判断"NAV 里为什么还在锁轮"只能靠猜，因为日志里看不到 CornerState。
+         *   第13列 CornerState   0=LINE 1=PIVOT 2=NAV
+         *   第14列 NavPhase      0=TURN 1=RUN 2=STOP（只在 CornerState==2 时有意义）
+         *   第15列 本帧实际生效的锁轮模式：
+         *         NAV 时 = InnerLockModeNav，其它状态 = InnerLockMode
+         *         看到这一列是 2 而你以为应该是 0，就说明状态没进 NAV 或固件没重编。 */
+        len = sprintf(display_buf, "[plot:%f,%f,\t%d,%d,\t%d,%d,\t%f,%f,%.6f,%.6f,%d,%f,\t%d,%d,%d\n]",
+TurnPID.Target,TurnPID.Actual1,LeftPWM,RightPWM,DifPWM,AvePWM,Angle,Yaw,RightSpeed,LeftSpeed,GX,SpeedPID.Target,//第12列 SpeedPID.Target：区分"有人在命令前进"与"外环符号反"
+(int)CornerState,(int)NavPhase,(int)((CornerState == CORNER_NAV) ? InnerLockModeNav : InnerLockMode));
 //        len = sprintf(display_buf, "[plot:%f,%f,%f,%.2f,%d,%d,%d,%d,%d,%d,%d,%d\n]",AveSpeed, SpeedPID.Target, SpeedPID.Out, Angle,
 //darkCnt, TrackLineSeen, CCD_Lost, CCD_Width, CCD_Zhongzhi,LeftPWM,RightPWM,AvePWM);//,TurnPID.Target,TurnPID.Actual1,DifPWM,AngleGX,GZ,%dGZ,DifSpeed,DifPWM,Angle
         HAL_UART_Transmit(&huart3, (uint8_t *)display_buf, (uint16_t)len, 100);
