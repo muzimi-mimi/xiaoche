@@ -178,7 +178,7 @@ volatile int16_t TestPWM = 0;		// 开环测试 PWM：仅在 ST_IDLE 生效，0=�
 
 
 
-volatile int16_t InnerLockModeNav = 0;	// 第四关 NAV 专用锁轮模式，★与 InnerLockMode 取值不同★；0=不锁(真原地转) 1/2/3 同 InnerLockMode；[slider,InnerLockNav,值] 在线切
+volatile int16_t InnerLockModeNav = 2;	// 第四关 NAV 专用锁轮模式，★与 InnerLockMode 取值不同★；0=不锁 1/2/3 同 InnerLockMode；[slider,InnerLockNav,值] 在线切
 									// ★ 2026-11-04 两态取不同值的理由：
 									//   循迹直角(PIVOT) 用 InnerLockMode=2 —— 绕内轮接触点贴弯，要的是"转完线还在视场里"，
 									//     车心平移 0.707 倍轮距是它换来的可重复性，可以接受。

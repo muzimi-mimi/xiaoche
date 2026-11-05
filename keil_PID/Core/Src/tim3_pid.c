@@ -755,25 +755,20 @@ static void Tick10_Attitude(void)
                 }
 #endif
 
-                if ((ph & 1) && lockMode == 2
-                    && (float)AvePWM < 0.5f * fabsf((float)DifPWM) - 2.0f)
+                if ((ph & 1) && lockMode == 2)
                 {
-                    /* 奇数段换轴：外轮钉 0 当转轴，内轮成唯一驱动轮 —— 但它必须
-                     * ★反向★（与 DifPWM 异号）才转得对：内轮的值是 AvePWM - |Dif|/2，
-                     * 只有 AvePWM < |DifPWM|/2 时它才是负的。
-                     * ★ 2026-11-03：原来这里写的是 fabsf(AvePWM)，把"负得深"的帧也
-                     * 一起毙了 —— 可反向转弯时 AvePWM 恰恰是负的（-10~-20），内轮
-                     * 反而更负、几何完全成立。奇数段因此在"锁外轮 / 退回锁内轮 /
-                     * 双轮全给"三态间以 10ms 周期来回切，就是左轮锁不住、车抖的来源。
-                     * 实测 AvePWM 冲到 +28 而 |DifPWM|/2 只有 8~10，那一段内轮会被
-                     * 推成正号 -> 车倒着转回来，把上一段转过的角度原样抵掉。
-                     * 所以两道保险：① 上面那个门限——几何不成立就不换轴，留在内轮轴
-                     * （行为退化成原来的单轮锁）；② 仍把驱动轮钳成与 DifPWM 异号。
-                     * 奇数段实发平均 = 驱动/2 <= 0（恒向后推），偶数段恒向前推，
-                     * 两段一推一拉互相抵消，位移才不累积。 */
-                    if (DifPWM > 0) LeftPWM  = 0;
-                    else            RightPWM = 0;
-                    if ((int)*pInner * (int)DifPWM > 0) *pInner = 0;
+                    /* 奇数段：外轮(左)钉 0 当转轴，内轮(右)成为唯一驱动轮，且必须反转。
+                     * 历史教训 2026-11-03：这里曾用 fabsf(AvePWM) 做门限，把反向转弯时
+                     * 本就为负的 AvePWM 一起毙了，奇数段在"锁外轮/锁内轮/双轮全给"三态间
+                     * 以 10ms 周期来回切 —— 就是"左轮锁不住、车抖"的来源。
+                     * ★ 2026-11-04 按需求改为：奇数段固定锁左轮（不再判符号）。
+                     * 依据：NAV 转弯帧实测 DifPWM 全程为正（|D|>=15 的 101 帧里 D 中位 +21，
+                     * D<0 的帧数为 0），所以内轮恒右、外轮恒左，符号判断是多余的。
+                     * 原来那道 AvePWM < |DifPWM|/2 - 2 的几何门限也已删除 ——
+                     * 它不满足时会把奇数段退回"锁右轮"，与偶数段锁同一只轮子，换轴等于没发生。
+                     * 两段一推一拉：奇数段实发平均 <= 0（向后推），偶数段恒向前推，位移不累积。 */
+                    LeftPWM = 0;
+                    if (RightPWM > 0) RightPWM = 0;   /* 驱动轮必须反转，否则本段角度会被倒着转回去 */
                 }
                 else if (lockMode == 1)
                 {
@@ -854,8 +849,8 @@ static void Tick10_Attitude(void)
                 PID_Update(&TurnPID);
                 DifPWM = (int16_t)TurnPID.Out;
 
-                LeftPWM  = swing + DifPWM ;
-                RightPWM = swing - DifPWM ;
+                LeftPWM  = swing + DifPWM/2 ;
+                RightPWM = swing - DifPWM /2;
 
                 if (LeftPWM > 100)        LeftPWM  = 100;
                 else if (LeftPWM < -100)  LeftPWM  = -100;
