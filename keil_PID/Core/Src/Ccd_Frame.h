@@ -123,7 +123,7 @@ extern volatile float PivotTargetDeg;  /* 原地转向目标角(度)，默认 84
  *     合计 3.6~5.3s，NAV_TURN_TIMEOUT_MS 为 8000，够用。
  *   填 0 = 关闭，回到旧的"进段立刻换轴"行为。只作用于 InnerLockMode=2；
  *   第三关 PIVOT 不执行这个窗口（段号恒为 -1）。 */
-#define PIVOT_SWAP_HOLD_MS  500
+#define PIVOT_SWAP_HOLD_MS  1000
 /* ★ 内轮锁是否也作用于第四关 NAV 转弯（2026-11-01 新增，默认 1）
  *   状态4 的 NAV 转弯与 PIVOT 走的是同一条执行链：Ccd_Frame.c:287 和 :300 都是
  *     TurnTargetCmd = TRACK_DIR * (float)CornerDir * PIVOT_RATE;

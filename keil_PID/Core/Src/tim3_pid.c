@@ -726,12 +726,20 @@ static void Tick10_Attitude(void)
              *
              * 放在 ±80 限幅之后：先保证不削顶，再钳内轮，顺序上内轮一定是
              * 最终下发值；串口 [plot:] 的 LeftPWM/RightPWM 两列也就是钳后的值。 */
-            if (InnerLockMode != 0
+            /* ★ 2026-11-04 锁轮拆成两个独立状态：
+             *     循迹/直角(PIVOT) -> InnerLockMode
+             *     第四关(NAV)      -> InnerLockModeNav
+             *   两者互不影响：把 NAV 设 0（不锁轮、真原地转）不会再顺手改掉
+             *   循迹直角的内轮行为，反之亦然。PIVOT_LOCK_NAV=0 可以把 NAV
+             *   这一态整体禁掉（回退开关）。 */
+            if (((CornerState == CORNER_NAV) ? InnerLockModeNav : InnerLockMode) != 0
                 && (CornerState == CORNER_PIVOT
                     || (PIVOT_LOCK_NAV && CornerState == CORNER_NAV))
                 && DifPWM != 0
                 && AvePWM >= -INNER_LOCK_MAX_AVE && AvePWM <= INNER_LOCK_MAX_AVE)
             {
+                int16_t  lockMode = (CornerState == CORNER_NAV) ? InnerLockModeNav
+                                                                : InnerLockMode;
                 int16_t *pInner = (DifPWM > 0) ? &RightPWM : &LeftPWM;
                 int      ph     = 0;        /* 内轮锁分段号，偶数=绕内轮，奇数=绕外轮 */
 
@@ -747,7 +755,7 @@ static void Tick10_Attitude(void)
                 }
 #endif
 
-                if ((ph & 1) && InnerLockMode == 2
+                if ((ph & 1) && lockMode == 2
                     && (float)AvePWM < 0.5f * fabsf((float)DifPWM) - 2.0f)
                 {
                     /* 奇数段换轴：外轮钉 0 当转轴，内轮成唯一驱动轮 —— 但它必须
@@ -767,7 +775,7 @@ static void Tick10_Attitude(void)
                     else            RightPWM = 0;
                     if ((int)*pInner * (int)DifPWM > 0) *pInner = 0;
                 }
-                else if (InnerLockMode == 1)
+                else if (lockMode == 1)
                 {
                     /* 模式B：只抬弱反转段，深度反转（< -INNER_LOCK_DZ）保留 */
                     if (*pInner < 0 && *pInner >= -INNER_LOCK_DZ) *pInner = 0;
@@ -775,7 +783,7 @@ static void Tick10_Attitude(void)
                 else
                 {
                     /* 模式A：内轮一律 >= 0，单轮驱动 */
-                    if (InnerLockMode == 3)
+                    if (lockMode == 3)
                     {
                         /* 模式C：内轮不钳死，抬到一个下限（定义见 Ccd_Frame.h 的
                          * INNER_LOCK_FLOOR_*）。与模式A 只差"下限是 0 还是正值"。 */
@@ -846,8 +854,8 @@ static void Tick10_Attitude(void)
                 PID_Update(&TurnPID);
                 DifPWM = (int16_t)TurnPID.Out;
 
-                LeftPWM  = swing + DifPWM / 2;
-                RightPWM = swing - DifPWM / 2;
+                LeftPWM  = swing + DifPWM ;
+                RightPWM = swing - DifPWM ;
 
                 if (LeftPWM > 100)        LeftPWM  = 100;
                 else if (LeftPWM < -100)  LeftPWM  = -100;
@@ -1008,7 +1016,7 @@ static void Tick50_SpeedTurn(void)
              * 判据用"严格变大"而不是"不相等"：刹车时车可能轻微回摆，让段号在边界上
              * 来回跳；用不等号会反复重开窗口，车就再也转不出这一段了。 */
             PivotSwapPhasePrev = PivotSwapPhase;
-            if ((PivotSwapPhase > 0) && (InnerLockMode == 2) && (PIVOT_SWAP_HOLD_MS > 0))
+            if ((PivotSwapPhase > 0) && (InnerLockModeNav == 2) && (PIVOT_SWAP_HOLD_MS > 0))
             {
                 PivotSwapHold = (uint16_t)((PIVOT_SWAP_HOLD_MS + 49u) / 50u);
                 /* 进窗先清两个积分：速度环 ErrorInt 里存的是上一段"维持前进/倒退"
@@ -1079,7 +1087,7 @@ static void Tick50_SpeedTurn(void)
 											/* 换轮奇数段：前进速度取负（PIVOT_REV_SPEED 为 0 时不起作用）。
 											 * 段号统一由 Tick50 开头的状态机算，这里不再重复算一遍，
 											 * 免得改目标角/改 N 时两处公式漂移。 */
-											if (PivotSwapPhase > 0 && (PivotSwapPhase & 1))
+											if (CornerState == CORNER_PIVOT && PivotSwapPhase > 0 && (PivotSwapPhase & 1))  /* NAV 只转+前进，不倒退 */
 												SpeedTargetCmd = -PIVOT_REV_SPEED;
 					#endif
 					dSpd = SpeedTargetCmd - SpeedTargetRamp;

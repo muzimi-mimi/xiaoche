@@ -123,6 +123,15 @@ void Blue_ProcessPackets(void)
                         if (m > 3) m = 3;
                         InnerLockMode = m;
                     }
+                    else if (strcmp(Name, "InnerLockNav") == 0)	// ★ 第四关 NAV 专用锁轮模式 0/1/2/3
+                    {
+                        /* 与 InnerLock 完全独立：改这里不影响循迹/直角，改 InnerLock 也不影响 NAV。
+                         * NAV 要"原地转 + 前进"就设 0；要贴角就设 2。 */
+                        int16_t m = (int16_t)atof(Value);
+                        if (m < 0) m = 0;
+                        if (m > 3) m = 3;
+                        InnerLockModeNav = m;
+                    }
 
                 }
                 else if (strcmp(Tag, "joystick") == 0)		// [joystick,LH,LV,RH,RV]：摇杆帧

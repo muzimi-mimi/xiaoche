@@ -400,6 +400,12 @@ void Ccd_Frame(void)
             else if (CornerState == CORNER_NAV)
             {
                 /* ================= 第四关：惯性导航 =================
+                 * ★ 2026-11-04 与循迹彻底解耦：进入 CORNER_NAV 后决策链里只剩"转 + 前进"——
+                 *   转向目标只由 NavPhase 给（TURN=PIVOT_RATE / RUN=航向保持 / STOP=0）；
+                 *   速度只由 NAV_SPEED / CORNER_SPEED / 0 给，不经过 TrackSlowFactor；
+                 *   不再有奇偶段倒退（PIVOT_REV_SPEED 已只对 CORNER_PIVOT 生效）；
+                 *   锁轮走独立的 InnerLockModeNav，不受循迹用的 InnerLockMode 影响。
+                 *   即：这一态里没有任何循迹参数参与决策。
                  * 三段推进，全部靠 Yaw 累计角与编码器里程，不读 CCD 纠偏 ——
                  * 转过 100 度以上之后线早已不在 110mm 视场内，拿 CCD 当地图只会得到"丢线"。
                  * 里程 NavDist 与计时 NavTicks 由 tim3_pid.c 维护（50ms / 10ms 拍），

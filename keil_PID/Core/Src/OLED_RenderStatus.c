@@ -65,7 +65,7 @@ static const char *StateStr(void)
  *   y=32       T:<角度环目标>       x=60: Yaw:<偏航角>
  *   y=40       Angle:<倾角实测>     x=84: N<已识别贴纸数>
  *   y=48       O:<角度环输出>       x=64: B<电池电压>/!<亏电>
- *   y=56       TRK<!/-><转向目标>
+ *   y=56       TRK<!/-><转向目标>     x=90: D<实时位移mm，带符号>
  *
  * 每行最多 21 个字符（128/6），最长的是 "T255 Z127 127-127 L1" = 20 字符，
  * 刚好不越界。改格式前先数长度。
@@ -148,12 +148,16 @@ void OLED_RenderStatus(void)
     }
     OLED_Printf(0, 56, OLED_6X8, "TRK%c%+05.2f", TrackMode ? '!' : '-', TurnPID.Target);/* ! = 循迹中，- = 不循迹 */
 
-    /* 第四关进行中：在 TRK 那行右侧显示已数到的黑贴纸数(N)与里程(D, mm)。
-     * 这两列是上车核对用的：N 要和实际经过的贴纸数一致，D 应停在 NAV_DIST_MM 附近。
-     * 宽度：从 x=60 起 "N%02u D%03.0f" 最多 8 字 = 48px，收在 x=108，不越 128。 */
-    if (CornerState == CORNER_NAV)
-        OLED_Printf(60, 56, OLED_6X8, "N%02u D%03.0f",
-                    (unsigned)NavStickerCnt, (double)NavDist);
+    /* 右下角：实时位移(mm，带符号)。任何状态都累加，换状态(CarState/CornerState/
+     * NavPhase)时由 tim3_pid.c 清零，所以显示的是"当前状态下的净位移"；
+     * 后退显示负值。宽度：x=90 起 "D%+05.0f" 最多 6 字 = 36px，收在 x=126；
+     * 超过 ±9999mm 截断，防多一位顶出屏幕。 */
+    {
+        float d = TravelMM;
+        if (d > 9999.0f) d = 9999.0f;
+        else if (d < -9999.0f) d = -9999.0f;
+        OLED_Printf(90, 56, OLED_6X8, "D%+05.0f", (double)d);
+    }
 
     OLED_Update();
 }

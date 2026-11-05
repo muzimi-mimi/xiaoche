@@ -178,6 +178,7 @@ volatile int16_t TestPWM = 0;		// 开环测试 PWM：仅在 ST_IDLE 生效，0=�
 
 
 
+volatile int16_t InnerLockModeNav = 2;	// 第四关 NAV 专用锁轮模式，与 InnerLockMode 独立；0=关 1/2/3 同 InnerLockMode；[slider,InnerLockNav,值] 在线切
 volatile int16_t InnerLockMode = 2;	// 内轮强制不转(方案三)：0=关 1=只钳弱反转段 2=内轮钳0 3=内轮设下限；[slider,InnerLock,值] 在线切
 									// 2026-11-01 实测模式2 可用，故默认取 2。10-28 那次"模式2 摔车"发生在
 									// INNER_LOCK_MAX_AVE 门限加入之前：钳内轮会破坏 (L+R)/2==AvePWM，
@@ -235,6 +236,12 @@ volatile uint8_t NavStickerSeen = 0;
 uint16_t NavTicks   = 0;
 float    NavYawHold = 0.0f;
 volatile uint8_t NavArmed = 1;      /* 上电即可进入；Track_Reset / PID_ResetAll 会重新置 1 */
+
+/* ---- 实时位移（mm，带符号）----
+ * 任何状态下每 50ms 累加 AveSpeed x 轮周长 x 0.05s：前进变大、后退变小；
+ * IDLE 手推、ERECT 甩轮也计数。CarState / CornerState / NavPhase 任一变化就清零，
+ * 所以 OLED 右下角显示的是"当前状态下的净位移"。 */
+volatile float TravelMM = 0.0f;
 
 uint16_t ErectTime = 0;			/* 本次 ERECT 已经跑了多少 ms，每 10ms 加一次；也用于 LED 闪烁 */
 float LeftSpeed, RightSpeed;		/* 左/右轮速度（转/秒） */

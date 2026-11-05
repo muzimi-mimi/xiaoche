@@ -130,6 +130,20 @@ extern volatile int16_t TestPWM;
  *     speed ≈ 0.060*PWM - 0.17，死区只有 2~3 个数。
  *   所以"内轮反转没劲"不是执行器故障，方案三是几何选择而不是故障规避。 */
 extern volatile int16_t InnerLockMode;
+/* ★ 2026-11-04 InnerLockModeNav：第四关 NAV 专用锁轮模式，与 InnerLockMode 完全独立。
+ *
+ *   为什么拆两个：NAV 转弯和循迹/直角(PIVOT)转弯的几何目标不同 ——
+ *     PIVOT 要绕内轮接触点贴住弯，NAV 要的是"原地转 + 匀速前进"，
+ *     两者对"内轮该不该钉住"的答案本来就不一样。共用一个值，
+ *     调 NAV 会顺手改掉循迹的直角行为（11-04 日志里 DifPWM 只有 4 就是这么来的）。
+ *
+ *   0 = NAV 不锁轮：内轮照常反转，真正的原地转，车心不动
+ *   1 = 模式B（只抬弱反转段）/ 2 = 模式A（内轮钳 0）/ 3 = 模式C（内轮抬下限）
+ *       0/1/2/3 的含义与 InnerLockMode 完全一致
+ *
+ *   谁写它：蓝牙 [slider,InnerLockNav,值]（Blue_ProcessPackets.c）
+ *   谁用它：只有 tim3_pid.c 的执行器分发，且仅当 CornerState == CORNER_NAV */
+extern volatile int16_t InnerLockModeNav;
 extern float DifSpeedFilter;
 extern float TurnTargetCmd;
 extern float TurnTargetRamp;
@@ -162,6 +176,7 @@ extern volatile uint8_t NavStickerSeen;/* 贴纸回差状态：1 = 正压在一�
 extern uint16_t NavTicks;              /* 本段已跑 ms（tim3_pid.c 每 10ms 加一次） */
 extern float    NavYawHold;            /* RUN 段锁定的朝向(度)：直行期间用它做航向保持 */
 extern volatile uint8_t NavArmed;      /* 1 = 允许进入第四关；进入后清 0（NAV_ONE_SHOT=1 时只认第一个左直角） */
+extern volatile float   TravelMM;      /* 实时位移(mm，带符号)：任何状态都累加，换状态清零 */
 extern uint16_t ErectTime;
 extern float LeftSpeed, RightSpeed;
 extern float AveSpeed, DifSpeed;
