@@ -268,34 +268,12 @@ static float AngleComp_Update(float accel_m, float gyro_m)
 #define TURN_AVE_CLAMP_PWM  0
 #define TURN_AVE_CLAMP_TGT  0.5f    /* |TurnPID.Target| >= 它才压共模 */
 
-/* ★★ 2026-11-04 三环独立（结构改动，参照 WHEELTEC B570 的并联结构）-----------
- * 原来：串级 —— SpeedPID.Out 冒充 AnglePID.Target（"目标倾角"），
- *       速度环的输出于是被塞进直立环的误差里，两个环的积分互相污染。
- * 现在：三个环各算各的 PWM，在 PWM 域相加：
- *         AvePWM = 直立环(-AnglePID.Out) + 速度环(SpeedPID.Out * 本系数)
- *         DifPWM = 转向环(TurnPID.Out + TURN_FF*Target)   ← 一行都不动
- *       直立环 Target 固定为 0（机械中值），速度环不再经过它。
- *
- * 系数不是拍脑袋，是推导出来的：串级时
- *     AvePWM = -Kp_angle * (SpeedPID.Out - Angle)
- *            = +Kp_angle * Angle  -  Kp_angle * SpeedPID.Out
- *   对上式，并联形式的系数必须等于 **-Kp_angle = -16.9** 才与串级等价。
- *   负号不是笔误：平衡车要加速，必须先让轮子往后转、把车压前倾，再往前走。
- *
- * 填 -16.9 = 与串级行为等价（第一次烧录应当看不出差别，这是刻意的、可验证的基线）；
- * 之后可以把它当成独立的 PWM 环单独重调（典型范围 -10 ~ -25）。
- * ⚠ 填 0 = 速度环失效（车不再主动保持位置），不要填 0。 */
-#define VELOCITY_DEG_TO_PWM   (-16.9f)
-
-/* ★ 2026-11-04 修正并联饱和：执行器限幅只做一次，而且必须做在**两者相加之后**。
- * 串级时饱和发生在 AnglePID.Out（误差里已经含了速度环的命令）；
- * 并联后若把直立环先钳到 ±80、再减速度项，速度项最大 -84.5 会把直立环
- * 整个抵消掉 —— 11-04 日志实测就是这个：Angle 挂在 +10~24°、
- *   AvePWM 恒等于 -4（= 直立环 +80 被速度环 -84.5 吃掉）
- *   而 SpeedPID.Target 被坏包锁死在 1.4，速度环一直顶着 OutMax。
- * 所以 main.c 里把 AnglePID.OutMax/OutMin 放到 ±240（只做内部计算用），
- * 真正的 ±80 在这里做。这样"车歪了要救"时直立环仍能拿到满权限。 */
-#define AVE_PWM_LIMIT   80
+/* ★ 2026-11-04 三环独立**已退回串级**（e96f8b9 引入；74dd3c3 修过一次饱和顺序后仍决定退回）。
+ * 退回原因：并联后直立环先被钳到 ±80、速度项再减，大信号下速度项能把救车权限
+ * 整个吃掉 —— 实测 Angle 挂 15° 时 AvePWM 只有 -4，车想回正却被按住。
+ * 已恢复：AnglePID.Target = SpeedPID.Out（串级），AvePWM = -AnglePID.Out。
+ * 想再试并联：恢复 VELOCITY_DEG_TO_PWM(-16.9) 与 AVE_PWM_LIMIT(80)，
+ *   并把 main.c 的 AnglePID.OutMax 放到 ±240，限幅放在两者相加之后。 */
 
 
 
@@ -744,10 +722,7 @@ static void Tick10_Attitude(void)
             {
                 float intSave = AnglePID.ErrorInt;   /* 限幅期间冻结积分，见 TURN_AVE_CLAMP_PWM */
                 PID_Update(&AnglePID);
-                /* ★ 三环独立：直立环 + 速度环，在 PWM 域相加（原先是 AvePWM = -AnglePID.Out 串级） */
-                AvePWM = (int16_t)(-AnglePID.Out + SpeedPID.Out * VELOCITY_DEG_TO_PWM);
-                if (AvePWM > AVE_PWM_LIMIT)       AvePWM =  AVE_PWM_LIMIT;
-                else if (AvePWM < -AVE_PWM_LIMIT) AvePWM = -AVE_PWM_LIMIT;
+                AvePWM = -AnglePID.Out;
                 if (fabsf(TurnPID.Target) >= TURN_AVE_CLAMP_TGT)
                 {
                     if (AvePWM > TURN_AVE_CLAMP_PWM)
@@ -764,10 +739,7 @@ static void Tick10_Attitude(void)
             }
 #else
             PID_Update(&AnglePID);
-            /* ★ 三环独立：直立环 + 速度环，在 PWM 域相加（原先是 AvePWM = -AnglePID.Out 串级） */
-            AvePWM = (int16_t)(-AnglePID.Out + SpeedPID.Out * VELOCITY_DEG_TO_PWM);
-            if (AvePWM > AVE_PWM_LIMIT)       AvePWM =  AVE_PWM_LIMIT;
-            else if (AvePWM < -AVE_PWM_LIMIT) AvePWM = -AVE_PWM_LIMIT;
+            AvePWM = -AnglePID.Out;
 #endif
 
             LeftPWM  = AvePWM + DifPWM / 2;
@@ -1161,7 +1133,7 @@ static void Tick50_SpeedTurn(void)
 /* 速度环 PID 计算 */
 				SpeedPID.Actual = AveSpeed;			
 				PID_Update(&SpeedPID);				// 把组装好的速度喂给 PID 计算
-				AnglePID.Target = 0.0f;				/* ★ 三环独立：直立环目标恒为机械中值 0，速度环改走 VELOCITY_DEG_TO_PWM */
+				AnglePID.Target = SpeedPID.Out;		/* 串级：速度环的输出就是直立环的目标倾角（★ 三环独立已退回） */
 				
 /* 转向 PID 计算 */
 				/* 静止窗口内把转向目标也置 0：否则 TurnPID 对着"车没在转"持续出力，
