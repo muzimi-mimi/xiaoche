@@ -178,9 +178,7 @@ volatile int16_t TestPWM = 0;		// 开环测试 PWM：仅在 ST_IDLE 生效，0=�
 
 
 
-volatile int16_t InnerLockMode = 0;	// 内轮强制不转(方案三)：0=关 1=只钳弱反转段 2=内轮钳0 3=内轮设下限；[slider,InnerLock,值] 在线切
-									// ★ 2026-11-04 默认改 0（关）：目标是原地转向，内轮必须能反转。
-									// 锁轮代码一行未删，串口发 [slider,InnerLock,2] 即可随时回模式2。
+volatile int16_t InnerLockMode = 2;	// 内轮强制不转(方案三)：0=关 1=只钳弱反转段 2=内轮钳0 3=内轮设下限；[slider,InnerLock,值] 在线切
 									// 2026-11-01 实测模式2 可用，故默认取 2。10-28 那次"模式2 摔车"发生在
 									// INNER_LOCK_MAX_AVE 门限加入之前：钳内轮会破坏 (L+R)/2==AvePWM，
 									// 门限在 |AvePWM|>15 时放开内轮，该摔车条件已不成立。见 Ccd_Frame.h:56
@@ -272,7 +270,7 @@ PID_t AnglePID =  					// 角度环：输入 Angle，输出 AvePWM（直立控�
 	.ErrorIntMin = -600,			// 积分限幅
 
 };
-PID_t SpeedPID =  					// 速度环：输入 AveSpeed(转/秒)，输出 VelocityPWM（★ 2026-11-04 三环独立：不再串级当 AnglePID.Target，见 tim3_pid.c 的 VELOCITY_DEG_TO_PWM）
+PID_t SpeedPID =  					// 速度环：输入 AveSpeed(转/秒)，输出 AnglePID.Target(目标倾角)
 {
     .Kp = 2.7,						// 比例系数
     .Ki = 0.21,						// 积分系数

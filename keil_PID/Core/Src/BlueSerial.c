@@ -69,31 +69,6 @@ void BlueSerial_Printf(char *format, ...)
     BlueSerial_SendString(String);
 }
 
-/* ★ 2026-11-04 新增：串口溢出后的"装死"救援。
- * 现象：发多字节包([joystick,...])时偶发收不到后续任何命令，SpeedPID.Target 被
- *   最后一条包锁死（实测锁在 1.4），必须断电重启才恢复。
- * 原因：HAL_UART_Receive_IT 会同时打开 PEIE/EIE，一旦 ORE(溢出) 触发，
- *   HAL_UART_IRQHandler 会调 UART_EndRxTransfer 把 RxState 退回 READY 并调用
- *   本回调——而工程原先没有这个回调，走的是 weak 空实现，于是**再也没有人
- *   重新调用 Receive_IT**，接收从此永久哑掉。AGENTS §5 记的就是这个坑。
- * 处置：清掉错误标志、丢弃半条包、把单字节接收重新挂上。 */
-void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
-{
-    if (huart->Instance == USART3)
-    {
-        __HAL_UART_CLEAR_OREFLAG(huart);
-        __HAL_UART_CLEAR_FEFLAG(huart);
-        __HAL_UART_CLEAR_NEFLAG(huart);
-        __HAL_UART_CLEAR_PEFLAG(huart);
-
-        huart->RxState = HAL_UART_STATE_READY;   /* HAL 已 EndRxTransfer，强制回到就绪 */
-        RxState   = 0;                           /* 半条包丢掉，别把后续字节当包体 */
-        pRxPacket = 0;
-
-        HAL_UART_Receive_IT(&huart3, &BlueSerial_RxData, 1);
-    }
-}
-
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
     if (huart->Instance == USART3)
