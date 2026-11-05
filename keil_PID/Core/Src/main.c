@@ -178,7 +178,13 @@ volatile int16_t TestPWM = 0;		// 开环测试 PWM：仅在 ST_IDLE 生效，0=�
 
 
 
-volatile int16_t InnerLockModeNav = 2;	// 第四关 NAV 专用锁轮模式，与 InnerLockMode 独立；0=关 1/2/3 同 InnerLockMode；[slider,InnerLockNav,值] 在线切
+volatile int16_t InnerLockModeNav = 0;	// 第四关 NAV 专用锁轮模式，★与 InnerLockMode 取值不同★；0=不锁(真原地转) 1/2/3 同 InnerLockMode；[slider,InnerLockNav,值] 在线切
+									// ★ 2026-11-04 两态取不同值的理由：
+									//   循迹直角(PIVOT) 用 InnerLockMode=2 —— 绕内轮接触点贴弯，要的是"转完线还在视场里"，
+									//     车心平移 0.707 倍轮距是它换来的可重复性，可以接受。
+									//   第四关(NAV) 用 0 —— 目标是"原地转向"：两只轮子必须反向，车心不动。
+									//     模式A/B/C 全都建立在"一只轮子不动"上，几何上就是弧线，与原地转向互斥。
+									//   11-04 日志实测：左轮=0、右轮被钳 0，两只轮子都不动，车 418 帧只转了 -21°。
 volatile int16_t InnerLockMode = 2;	// 内轮强制不转(方案三)：0=关 1=只钳弱反转段 2=内轮钳0 3=内轮设下限；[slider,InnerLock,值] 在线切
 									// 2026-11-01 实测模式2 可用，故默认取 2。10-28 那次"模式2 摔车"发生在
 									// INNER_LOCK_MAX_AVE 门限加入之前：钳内轮会破坏 (L+R)/2==AvePWM，
