@@ -682,6 +682,8 @@ static void Tick10_Attitude(void)
         }
 
         /* ================= 执行器分发：按状态出 PWM ================= */
+/* ★ 2026-11-04 左右轮死区补偿量（用户指定 5 个 PWM，见下面下发前的补偿段） */
+#define WHEEL_DZ_PWM  5
         if (CarState == ST_BALANCE)
         {
             /* ---------- 直立环（原平衡环）----------
@@ -784,6 +786,25 @@ static void Tick10_Attitude(void)
                     else if (*pInner < 0) *pInner = 0;
                 }
             }
+
+            /* ★ 2026-11-04 左右轮死区补偿：|PWM| > 0 时再沿运动方向补 WHEEL_DZ_PWM 个，
+             *   帮轮子越过电机的起动死区（实测反向最明显：右轮 -21 才换到 0.29 转/秒，
+             *   左轮 -4 干脆不动、被车体拖着正向 +0.07 滚）。
+             *   PWM == 0 保持 0 —— 内轮被锁(钳 0)时不会被这条补活，静止的轮子也不会被灌。
+             *   代价：(L+R)/2 == AvePWM 不再成立：
+             *     两轮同向(前进)  -> 共模各 +5，差模不变；
+             *     两轮反向(原地转)-> 差模各 +10，共模不变（正好是想要的）。
+             *   放在内轮锁之后、下发之前，所以串口 [plot:] 的 LeftPWM/RightPWM
+             *   就是补过之后的真实下发值。补完再钳一次 ±80，别越界。 */
+            if (LeftPWM > 0)       LeftPWM  += WHEEL_DZ_PWM;
+            else if (LeftPWM < 0)  LeftPWM  -= WHEEL_DZ_PWM;
+            if (RightPWM > 0)      RightPWM += WHEEL_DZ_PWM;
+            else if (RightPWM < 0) RightPWM -= WHEEL_DZ_PWM;
+
+            if (LeftPWM > 80)        LeftPWM  = 80;
+            else if (LeftPWM < -80)  LeftPWM  = -80;
+            if (RightPWM > 80)       RightPWM = 80;
+            else if (RightPWM < -80) RightPWM = -80;
 
             TB6612_setPWM(1, LeftPWM);
             TB6612_setPWM(2, RightPWM);
@@ -933,6 +954,23 @@ static void Tick50_SpeedTurn(void)
          * AveSpeed 为负(被反拖)时 NavDist 会减少，这是对的：算的是净位移。 */
         if (CornerState == CORNER_NAV && NavPhase == NAV_PHASE_RUN)
             NavDist += AveSpeed * WHEEL_CIRC_MM * 0.05f;
+
+        /* ---- 实时位移：任何 CarState 都累加，状态一变就清零 ----
+         * 用带符号的 AveSpeed 算净位移：前进变大、后退变小。
+         * 不限于平衡态：IDLE 时手推车、ERECT 甩轮也照样计数，方便标定/观察。
+         * 清零覆盖 CarState / CornerState / NavPhase —— 换状态就把上一段的量丢掉，
+         * 所以 NAV 的 TURN→RUN 也从 0 起算，右下角的 D 和 800mm 目标可以直接对。 */
+        {
+            static uint8_t lastCar = 0xFF, lastCorner = 0xFF, lastNav = 0xFF;
+            if (CarState != lastCar || CornerState != lastCorner || NavPhase != lastNav)
+            {
+                lastCar    = CarState;
+                lastCorner = CornerState;
+                lastNav    = NavPhase;
+                TravelMM   = 0.0f;
+            }
+            TravelMM += AveSpeed * WHEEL_CIRC_MM * 0.05f;
+        }
 			
         /* ---- 转向目标斜坡限速：每 50ms 最多变 TURN_SLEW，把 Cmd 渐变送到 Ramp ----
          * 无条件更新(不受 CarState 限制)：起立/急停时 Cmd 已被 PID_ResetAll 清 0，
