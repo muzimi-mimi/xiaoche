@@ -262,3 +262,25 @@ git -C D:/codex config --local http.sslBackend schannel
 
 **禁止**把 1500 行的未提交改动攒在手里过夜——那既是对别人的地雷（见 7.1），
 也是对自己的一锤子买卖（覆盖后无法找回）。
+
+### 7.6 Qoder 会话：一个 DSH 会话 ↔ 一个 Qoder 会话
+
+DSH 会话通过 `--remote-debugging-port=9222` 驱动 Qoder CN 干活。但 Qoder 的输入框、
+当前任务、工作区都是**单例**：两个 DSH 会话同时往同一个 Qoder 窗口里打字，
+必然互相顶掉对方的问题、抢光标、把在跑的任务打断。
+
+规则：
+
+1. **一个 DSH 会话只占一个 Qoder 会话**。开工先点「新的任务」，地址里
+   `#/chat/<id>` 的 `<id>` 就是本轮绑定的 Qoder 会话。
+2. **绑定关系要落盘**：`<DSH 会话标识> → <Qoder chat id> / <任务标题>` 写进本轮的
+   提交信息或核对文档，事后能查出「是谁占了哪个会话」。
+3. **发送前先验身份**：读 `location.href`，`chat id` 不是自己绑定的那个就停手、问用户，
+   不要往别人的会话里补问题。
+4. **用完释放**：任务结束就不再复用这个 Qoder 会话；9222 随 Qoder 退出关闭。
+   端口开着 = 本机任何进程都能完全操作该 IDE（含它读过的文件内容），不要常开。
+5. **不要硬编码版本路径**：启动前读
+   `C:\Users\huang\AppData\Local\Qoder CN\Qoder CN Launcher\state.ini` 的
+   `installDir` + `appExecutable` 再拼真身路径（`.qoder-versions` 下已有 0.5.5 / 0.5.6）。
+   `Qoder CN Launcher.exe` 是约 100 ms 的引导壳，**不转发**任何启动参数；
+   要带 `--remote-debugging-port` 只能直接起真身。
